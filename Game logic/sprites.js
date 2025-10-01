@@ -50,6 +50,7 @@ export class Dragon {
         this.fireballs = []
         this.fireTime = 0;
         this.megaabilty = new Signal()
+        this.onDeath = new Signal()
     }
     update(delta){
         this.size = new Vector(40*Math.max(Math.min(this.power,5),1),40*Math.max(Math.min(this.power,5),1))
@@ -149,7 +150,18 @@ export class Dragon {
             this.vlos.x *= 0.8;
             this.vlos.y += 3;
         }
+        if(this.health<=0){
+            this.onDeath.emit()
+            
+        }
         
+    }
+    reset(pos=new Vector(1920/2,1080/2)){
+        this.health = 100;
+        this.power = 0.2;
+        this.anger = 0;
+        this.vlos = new Vector(0,0);
+        this.pos = pos;
     }
     draw(){
         let rot = Math.sign(this.vlos.x) * Math.PI/4 * Math.pow(this.vlos.y,0.3)/2

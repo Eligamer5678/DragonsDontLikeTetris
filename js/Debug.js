@@ -7,7 +7,6 @@ function getCallerLocation(stackShift = 3) {
     const lines = err.stack.split('\n');
     // stackShift: 0=Error, 1=this function, 2=log/error, 3=caller
     if (lines.length > stackShift) {
-        // Chrome: at file.js:line:col
         const match = lines[stackShift].match(/\(?([^\s\)]+):(\d+):(\d+)\)?$/);
         if (match) {
             return `${match[1]}:${match[2]}`;
@@ -89,7 +88,7 @@ class Debug {
         this._debugInputWheelAdded = true;
         const wheelHandler = (e) => {
             try {
-                const delta = e.deltaY;
+                const delta = -e.deltaY;
                 if (!this.logs || this.logs.length <= 1) {
                     e.preventDefault();
                     return;

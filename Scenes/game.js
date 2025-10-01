@@ -48,7 +48,6 @@ export class GameScene extends Scene {
 
     onReady() {
         this.isReady = true;
-        
         this.createUI()
         this.AITimer = new Timer('loop', 0.1);
         this.AITimer.onLoop.connect(() => this.Board.updateAI());
@@ -58,13 +57,43 @@ export class GameScene extends Scene {
         this.AITimer.start();
         this.sessionTimer.start();
         this.fallTimer.start();
+
+        // Session data
+        this.deaths = 0;
+        this.aiScore = 0;
+        this.resets = 0;
+        this.sessionBlocks = 0;
+
         this.dragon = new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(1920/2,1080/2),this.SpriteImages)
         this.Board = new Board(this.Draw,this.dragon);
         this.Board.onPlace.connect(()=>this.soundGuy.play('place'))
-        this.Board.onLineclear.connect(()=>this.soundGuy.play('lineclear'))
+        this.dragon.onDeath.connect(()=>{
+            console.log("dragon died.");
+            this.soundGuy.play('death');
+            this.deaths+=1;
+            this.dragon.reset(new Vector(1920/2,1080/2));
+            this.Board.reset();
+        })
+        this.Board.onLineclear.connect((lines)=>{
+            this.soundGuy.play('lineclear');
+            switch (lines) {
+                case 1: this.aiScore += 40; break;
+                case 2: this.aiScore += 100; break;
+                case 3: this.aiScore += 300; break;
+                case 4: this.aiScore += 1200; break;
+                default: break;
+            }
+        })
+        this.Board.onTopout.connect(()=>{
+            this.soundGuy.play('reset')
+            this.resets+=1
+        })
+        
+
         this.Board.onRotate.connect(()=>this.soundGuy.play('rotate'))
-        this.Board.blockBroken.connect(()=>{this.soundGuy.play('break')})
+        this.Board.blockBroken.connect(()=>{this.soundGuy.play('break');this.sessionBlocks+=1;})
         this.Board.blockDamaged.connect(()=>this.soundGuy.play('fireball'))
+        
     }
 
     update(delta) {

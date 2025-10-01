@@ -10,7 +10,7 @@ export default class Board {
         this.size = size;
         this.gridPos = new Vector(1920/2-this.size.x/2,1080/2-this.size.y/2);
         this.tileSize = 20;
-        this.resetBoard();
+        this.reset();
         this.colors = {
             'grid': new Color(1,0,1,0.5),
             'blocks': new Color(0.6,1,0.64,1),
@@ -30,9 +30,11 @@ export default class Board {
         this.dragon = dragon;
     }
 
-    resetBoard(){
+    reset(){
         this.board = [];
         this.board = Array.from({ length: 20 }, () => Array(10).fill(0));
+        this.activeTetromino = new Tetromino('random');
+        this.aiTarget = null;  
     }
 
     setTile(pos, value){
@@ -108,11 +110,14 @@ export default class Board {
         }
         for (let y = 0; y < this.board.length; y++){
             for (let x = 0; x < this.board[y].length; x++){
-                if(this.board[y][x]<=0) continue;
+                if(this.board[y][x]<=0||!this.board[y][x]) {
+                    this.board[y][x] = 0;
+                    continue;
+                }
                 if(this.board[y][x] < 2){
                     this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.blocks.toHex(Math.max(this.board[y][x],0.2)))
                 }else if(this.board[y][x] === 2){
-                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.danger.toHex())
+                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.danger)
                 }else{
                     this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),`rgba(55,55,55,${this.board[y][x]/10})`)
                 }   
@@ -153,7 +158,7 @@ export default class Board {
                         this.setTile(part,1)
                     } 
                     if(this.justSpawned){
-                        this.resetBoard();
+                        this.reset();
                         this.onTopout.emit()
 
                     }
@@ -192,8 +197,7 @@ export default class Board {
                 this.setTile(part,1)
             } 
             if(this.justSpawned){
-                this.resets+=1
-                this.resetBoard();
+                this.reset();
                 this.onTopout.emit()
             }
             this.activeTetromino = new Tetromino('random');
@@ -426,7 +430,7 @@ export default class Board {
     update(delta) {
         for (let y = 0; y < this.board.length; y++) {
             for (let x = 0; x < this.board[y].length; x++) {
-                if (this.board[y][x] <= 0){ 
+                if (this.board[y][x] <= 0 || !this.board[y][x]) { 
                     this.board[y][x] = 0;
                     continue;
                 }
