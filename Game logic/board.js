@@ -28,6 +28,7 @@ export default class Board {
         this.blockDamaged = new Signal();
         this.blockBroken = new Signal();
         this.dragon = dragon;
+        this.onPlace.connect(()=>this.clearLines())
     }
 
     reset(){
@@ -102,18 +103,12 @@ export default class Board {
     }
 
     draw(){
-        for (let i = 0; i< 11; i++){
-            this.Draw.line(this.gridPos.add(new Vector(i*this.size.x/10,0)),this.gridPos.add(new Vector(i*this.size.x/10,this.size.y)),this.colors.grid,5)
-        }
-        for (let i = 0; i< 21; i++){
-            this.Draw.line(this.gridPos.add(new Vector(0,i*this.size.x/10)),this.gridPos.add(new Vector(this.size.x,i*this.size.x/10)),this.colors.grid,5)
-        }
+        this.Draw.line(this.gridPos.add(new Vector(0,0)),this.gridPos.add(new Vector(this.size.x,0)),this.colors.grid,5)
         for (let y = 0; y < this.board.length; y++){
+            if(y<11)this.Draw.line(this.gridPos.add(new Vector(y*this.size.x/10,0)),this.gridPos.add(new Vector(y*this.size.x/10,this.size.y)),this.colors.grid,5);
+            this.Draw.line(this.gridPos.add(new Vector(0,(y+1)*this.size.x/10)),this.gridPos.add(new Vector(this.size.x,(y+1)*this.size.x/10)),this.colors.grid,5)
             for (let x = 0; x < this.board[y].length; x++){
-                if(this.board[y][x]<=0||!this.board[y][x]) {
-                    this.board[y][x] = 0;
-                    continue;
-                }
+                if(this.board[y][x]<=0) {this.board[y][x] = 0;continue;}
                 if(this.board[y][x] < 2){
                     this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.blocks.toHex(Math.max(this.board[y][x],0.2)))
                 }else if(this.board[y][x] === 2){
@@ -123,60 +118,13 @@ export default class Board {
                 }   
             }
         }
-        if(this.dragon.keys.pressed('/')){
-            console.log(this.activeTetromino.getPositions())
-        }
         this.activeTetromino.getPositions().forEach(
             (pos)=>this.Draw.rect(new Vector(pos.x*this.size.x/10 + this.gridPos.x, pos.y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),new Color(1,1,1,1))
         )
     }
 
     moveTetromino(type='fall',data=new Vector(0,1)){
-        if(type==='fall'){
-            for(let i = 0; i < 0; i++){
-                if (this.activeTetromino === null){
-                    return false;
-                }
-                
-                let canMove = true;
-                for (let part of this.activeTetromino.getPositions()){
-                    if (this.checkTile(part.add(data)) || !this.checkBounds(part.add(data))){
-                        canMove = false;
-                    }
-                }
-                if(canMove){
-                    this.justSpawned = false;
-                    for (let part of this.activeTetromino.getPositions()){
-                        this.setTile(part,0)
-                    }
-                    this.activeTetromino.pos.addS(data)
-                    for (let part of this.activeTetromino.getPositions()){
-                        this.setTile(part,2)
-                    }
-                }else if(type === 'fall'){
-                    for (let part of this.activeTetromino.getPositions()){
-                        this.setTile(part,1)
-                    } 
-                    if(this.justSpawned){
-                        this.reset();
-                        this.onTopout.emit()
-
-                    }
-                    this.activeTetromino = new Tetromino('random');
-                    this.justSpawned = true;
-                    this.onPlace.emit();
-                    this.aiTarget = null;
-                    for (let part of this.activeTetromino.getPositions()){
-                        this.setTile(part, 2);
-                    }
-                }
-            }
-        }
-        
-        if (this.activeTetromino === null){
-            return false;
-        }
-        
+        if (this.activeTetromino === null) return false;
         let canMove = true;
         for (let part of this.activeTetromino.getPositions()){
             if (this.checkTile(part.add(data)) || !this.checkBounds(part.add(data))){
@@ -187,11 +135,9 @@ export default class Board {
             this.justSpawned = false;
             for (let part of this.activeTetromino.getPositions()){
                 this.setTile(part,0)
+                this.setTile(part.add(data),2)
             }
             this.activeTetromino.pos.addS(data)
-            for (let part of this.activeTetromino.getPositions()){
-                this.setTile(part,2)
-            }
         }else if(type === 'fall'){
             for (let part of this.activeTetromino.getPositions()){
                 this.setTile(part,1)
@@ -204,6 +150,7 @@ export default class Board {
             this.justSpawned = true;
             this.onPlace.emit()
             this.aiTarget = null;
+            this.activeTetromino.getPositions().forEach(()=>{})
             for (let part of this.activeTetromino.getPositions()){
                 this.setTile(part, 2);
             }
@@ -569,7 +516,7 @@ export default class Board {
                 this.damageDragon.emit()
             }
         }
-        this.clearLines()
+        
         if(this.dragon.power<4){
             if(this.dragon.pos.y+this.dragon.size.y>this.gridPos.y+this.size.y){
                 this.dragon.pos.y = this.gridPos.y+this.size.y - this.dragon.size.y;

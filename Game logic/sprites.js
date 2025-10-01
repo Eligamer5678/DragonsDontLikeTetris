@@ -194,6 +194,9 @@ export class FireBall {
         if(!Geometry.rectCollide(Vector.zero(),new Vector(1920,1080),this.pos,this.size)){
             this.adiós()
         }
+        if(!Geometry.rectCollide(new Vector(730,0),new Vector(470,1080),this.pos,this.size) && this.power<5){
+            this.adiós()
+        }
     }
     draw(){
         this.Draw.image(this.image,this.pos.sub(this.size.mult(0.5)),this.size,0,this.rot)

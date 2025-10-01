@@ -1,11 +1,11 @@
-    
-
 import Color from './Color.js';
 import Vector from './Vector.js';
 
 export default class Draw {
     constructor() {
         this.ctx = null;
+        this.ctxMap = new Map(); // Store multiple contexts by name
+        this.currentCtxName = null;
         this.Scale = new Vector(1, 1); // scaling for coordinates
         // Stack depths (save/restore counts)
         this._matrixDepth = 0;
@@ -22,14 +22,39 @@ export default class Draw {
     ps(num) { return num * this.Scale.x; }
     pv(vec) { return new Vector(this.px(vec.x), this.py(vec.y)); }
 
-    // =========================
-    // Context management
-    // =========================
-    useCtx(ctx) {
-        this.ctx = ctx;
+    /**
+     * Register a context with a name for fast swapping.
+     */
+    registerCtx(name, ctx) {
+        this.ctxMap.set(name, ctx);
+    }
+
+    /**
+     * Use a context by name or direct ctx object.
+     */
+    useCtx(ctxOrName) {
+        if (typeof ctxOrName === 'string') {
+            const ctx = this.ctxMap.get(ctxOrName);
+            if (!ctx) throw new Error(`Draw.useCtx: context '${ctxOrName}' not found.`);
+            this.ctx = ctx;
+            this.currentCtxName = ctxOrName;
+        } else {
+            this.ctx = ctxOrName;
+            // Optionally, you could search for the name in ctxMap and set currentCtxName
+        }
         return this;
     }
 
+    /**
+     * Get a context by name.
+     */
+    getCtx(name) {
+        return this.ctxMap.get(name);
+    }
+
+    // =========================
+    // Context management
+    // =========================
     _assertCtx(where) {
         if (!this.ctx) throw new Error(`Draw.${where}: no active context. Call useCtx(ctx) first.`);
         return this.ctx;
@@ -230,6 +255,13 @@ export default class Draw {
         const ctx = this._assertCtx('rect');
         const { x, y } = _asVec(pos);
         const { x: w, y: h } = _asVec(size);
+
+        // Special erase case: black & full alpha
+        if (erase && color === null) {
+            ctx.clearRect(x, y, w, h);
+            return;
+        }
+
         ctx.save();
         ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
         // --- FILLED SOLID ---

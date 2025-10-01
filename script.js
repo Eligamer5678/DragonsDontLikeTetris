@@ -25,7 +25,12 @@ class Game {
         this.delta = 0;
         this.program.addLayer('base', false);
         this.program.addLayer('UI', true);
+        this.program.addLayer('overlays', true);
         this.program.updateZ();
+        //Could you register a new ctx here in UIDraw:
+        this.UIDraw.registerCtx('overlays',this.program.getCtx('overlays'));
+        this.UIDraw.registerCtx('UI',this.program.getCtx('UI'));
+
 
         // Save data
         
@@ -63,7 +68,7 @@ class Game {
                 this.switchScene.bind(this),
                 this.loadScene.bind(this),
                 this.preloadScene.bind(this),
-                this.removeScene.bind(this)
+                this.removeScene.bind(this),
             );
             if (scene.onPreload) return  scene.onPreload(resources).then(() => {
                 this.scenes.set(name, scene);

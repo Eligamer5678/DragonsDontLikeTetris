@@ -60,8 +60,10 @@ export class TitleScene extends Scene {
     async loadImages(){
         console.log(`Loading images...`)
         this.BackgroundImageLinks = {
-            'ui':'Assets/Backgrounds/Base UI.png',
+            'ui1':'Assets/Backgrounds/Base UI 1.png',
+            'ui2':'Assets/Backgrounds/Base UI 2.png',
             'settings':'Assets/Backgrounds/Base Settings.png',
+            'background':'Assets/Backgrounds/Base Background.png',
             'title':'Assets/Backgrounds/Title screen.png',
             'bsod':'Assets/Backgrounds/BSOD.png',
             'desktop':'Assets/Backgrounds/windows.png',
@@ -83,8 +85,10 @@ export class TitleScene extends Scene {
         this.BackgroundImages = {
             'bsod':new Image(),
             'settings':new Image(),
+            'background':new Image(),
             'title':new Image(),
-            'ui':new Image(),
+            'ui1':new Image(),
+            'ui2':new Image(),
             'modifiers':new Image(),
             'desktop':new Image(),
 

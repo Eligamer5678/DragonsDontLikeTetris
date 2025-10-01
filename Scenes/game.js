@@ -57,12 +57,14 @@ export class GameScene extends Scene {
         this.AITimer.start();
         this.sessionTimer.start();
         this.fallTimer.start();
+        this.frameCount = 0;
 
         // Session data
         this.deaths = 0;
         this.aiScore = 0;
         this.resets = 0;
         this.sessionBlocks = 0;
+        this.lineMessages = [];
 
         this.dragon = new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(1920/2,1080/2),this.SpriteImages)
         this.Board = new Board(this.Draw,this.dragon);
@@ -73,20 +75,37 @@ export class GameScene extends Scene {
             this.deaths+=1;
             this.dragon.reset(new Vector(1920/2,1080/2));
             this.Board.reset();
+            this.lineMessages.push('HAHAHAHA!!!!!!!!!!!')
+            
         })
         this.Board.onLineclear.connect((lines)=>{
             this.soundGuy.play('lineclear');
             switch (lines) {
-                case 1: this.aiScore += 40; break;
-                case 2: this.aiScore += 100; break;
-                case 3: this.aiScore += 300; break;
-                case 4: this.aiScore += 1200; break;
+                case 1: 
+                    this.aiScore += 40; 
+                    this.lineMessages.push('Single. +40')
+                    break;
+                case 2: 
+                    this.aiScore += 100; 
+                    this.lineMessages.push('Double. +100')
+                    break;
+                case 3: 
+                    this.aiScore += 300; 
+                    this.lineMessages.push('Triple! +300')
+                    break;
+                case 4: 
+                    this.aiScore += 1200; 
+                    this.lineMessages.push('TETRIS!! +1200')
+                    this.narrator.playSequence(['tetris'],this.settings.volume.narrator)
+                    this.narratorCooldown = 1;
+                    break;
                 default: break;
             }
         })
         this.Board.onTopout.connect(()=>{
             this.soundGuy.play('reset')
             this.resets+=1
+            this.lineMessages.push('Stack overflow. Restarting...')
         })
         
 
@@ -101,6 +120,7 @@ export class GameScene extends Scene {
         this.AITimer.update(delta);
         this.fallTimer.update(delta);
         this.sessionTimer.update(delta);
+        this.frameCount += 1;
         this.AITimer.endTime = 1/(10*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
         this.fallTimer.endTime = 1/(5*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
         if(this.keys.pressed('any') || this.mouse.pressed('any')){
@@ -126,30 +146,49 @@ export class GameScene extends Scene {
     
     draw() {
         if(!this.isReady) return;
-        this.UIDraw.clear()
-        this.Draw.background(new Color(0,0,0))
-        this.UIDraw.image(this.BackgroundImages['ui'],Vector.zero(),new Vector(1920,1080))
-
-        this.Draw.text(Math.round(this.sessionTimer.getTime()*100)/100,new Vector(1920/2,1080/2),this.settings.colors.timer,1,100,{'align':'center','baseline':'middle'})
-
-        this.UIDraw.rect(new Vector(135,78),new Vector(this.dragon.health*5.08,34),'#FF0000')
-        this.UIDraw.rect(new Vector(153,135),new Vector(this.dragon.anger*489,32),'rgba(62, 173, 31, 1)')
-
-        this.UIDraw.text(`Power: ${Math.round((this.dragon.power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
-        this.UIDraw.text(`Score: ${Math.round(this.aiScore)}`,new Vector(80,300),"#999999ff",1,55,{'align':'start'})
-        this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1280,290),"#960000ff",1,55,{'align':'start'})
-        this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1280,350),this.settings.colors.blocks,1,55,{'align':'start'})
-        this.UIDraw.text(`Resets: ${Math.round(this.resets)}`,new Vector(1280,410),"#FFFFFF55",1,55,{'align':'start'})
-        this.UIDraw.text(`WASD or arrow keys to move.`,new Vector(1280,675),"#FFFFFF55",1,40,{'align':'start'})
-        this.UIDraw.text(`Hold space to shoot fireballs.`,new Vector(1280,735),"#FFFFFF55",1,40,{'align':'start'})
-        this.UIDraw.text(`Press g to use ability.`,new Vector(1280,795),"#FFFFFF55",1,40,{'align':'start'})
-
-        this.Board.draw()
-        this.dragon.draw()
+        // Left UI
+        if(!((this.frameCount)%2)){
+            this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
+            this.Draw.image(this.BackgroundImages['background'],Vector.zero(),new Vector(1920,1080))
+            this.Draw.text(Math.round(this.sessionTimer.getTime()*100)/100,new Vector(1920/2,1080/2),this.settings.colors.timer,1,100,{'align':'center','baseline':'middle'})
+            this.Board.draw()
+        }
+        if(!((this.frameCount-21)%20)){
+            this.UIDraw.rect(new Vector(0,0),new Vector(708,1080),null,true,0,true);
+            this.UIDraw.image(this.BackgroundImages['ui2'],Vector.zero(),new Vector(708,1080))
+            this.UIDraw.text(`Score: ${Math.round(this.aiScore)}`,new Vector(80,300),"#999999ff",1,55,{'align':'start'})
+            if(this.lineMessages.length>15){
+                this.lineMessages.shift();
+            }
+            
+            for(let l = 0; l<this.lineMessages.length; l++){
+                this.UIDraw.text(this.lineMessages[l],new Vector(80,440+l*40),"#999999ff",1,35,{'align':'start'})
+            }
+        }
+        // Right UI
+        if(!((this.frameCount-20)%20)){
+            this.UIDraw.rect(new Vector(1223,0),new Vector(697,1080),null,true,0,true);
+            this.UIDraw.image(this.BackgroundImages['ui1'],new Vector(1223,0),new Vector(697,1080))
+            this.UIDraw.text(`Power: ${Math.round((this.dragon.power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
+            this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1280,290),"#960000ff",1,55,{'align':'start'})
+            this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1280,350),this.settings.colors.blocks,1,55,{'align':'start'})
+            this.UIDraw.text(`Resets: ${Math.round(this.resets)}`,new Vector(1280,410),"#FFFFFF55",1,55,{'align':'start'})
+        }
+        this.UIDraw.rect(new Vector(135,78),new Vector(100*5.18,34),'#000000')
+        this.UIDraw.rect(new Vector(153,135),new Vector(1*499,32),'#000000')
+        this.UIDraw.rect(new Vector(135,78),new Vector(this.dragon.health*5.18,34),'#FF0000')
+        this.UIDraw.rect(new Vector(153,135),new Vector(this.dragon.anger*499,32),'rgba(62, 173, 31, 1)')
         let sortedElements = [...this.elements.values()].sort((a, b) => a.layer - b.layer);
         for (const elm of sortedElements) {
             elm.draw(this.UIDraw);
         }
+        this.UIDraw.useCtx('overlays')
+        this.UIDraw.clear()
+        this.dragon.draw()
+        this.UIDraw.useCtx('UI')
+
+        
+
     }
 
     
