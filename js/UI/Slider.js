@@ -1,12 +1,11 @@
-import { Vector } from '../Vector.js';
-import { Signal } from '../Signal.js';
-import { Geometry } from '../Geometry.js';
-import { Color } from '../color.js';
+import Vector from '../Vector.js';
+import Signal from '../Signal.js';
+import Geometry from '../Geometry.js';
+import Color from '../Color.js';
 
-export class UISlider {
+export default class UISlider {
     /**
      * 
-     * @param {Object} program - main program with mouse/keys
      * @param {Vector} pos - top-left position
      * @param {Vector} size - slider size
      * @param {number} layer - UI layer
@@ -21,12 +20,11 @@ export class UISlider {
      * @param {any} keybind - optional keybind
      */
     constructor(
-        program, pos, size, layer = 0, type = 'scalar', value = 0, min = 0, max = 1,
+        mouse,keys, pos, size, layer = 0, type = 'scalar', value = 0, min = 0, max = 1,
         baseColor = '#444', hoverColor = '#555', pressedColor = '#222', knobColor = '#aaa', keybind = null
     ) {
-        this.program = program;
-        this.mouse = program.mouse;
-        this.keys = program.keys;
+        this.mouse = mouse;
+        this.keys = keys;
 
         this.pos = pos;
         this.size = size;

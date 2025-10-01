@@ -1,7 +1,7 @@
-import { Vector } from './Vector.js';
-import { Polygon } from './Polygon.js';
+import Vector from './Vector.js';
+import Polygon from './Polygon.js';
 
-export class Geometry { 
+export default class Geometry { 
     /** Returns true if a point is in a rect */
     static pointInRect(point, rectPos, rectSize) {
         return (

@@ -1,4 +1,7 @@
-export class SoundManager {
+    
+import Signal from '../js/Signal.js';
+
+export default class SoundManager {
     constructor() {
         this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         this.sounds = {};             // Stores AudioBuffers
@@ -12,7 +15,12 @@ export class SoundManager {
         const audioBuffer = await this.audioCtx.decodeAudioData(arrayBuffer);
         this.sounds[name] = audioBuffer;
     }
-
+    resume() {
+        if (this.audioCtx && this.audioCtx.state !== 'running') {
+            return this.audioCtx.resume();
+        }
+        return Promise.resolve();
+    }
     play(name, volume = null, loop = false) {
         if (!this.sounds[name]) return null;
 

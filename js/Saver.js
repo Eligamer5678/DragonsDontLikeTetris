@@ -1,4 +1,4 @@
-export class Saver {
+export default class Saver {
     constructor(storageKey = "gameData") {
         this.storageKey = storageKey;
         this.savedata = {};

@@ -1,0 +1,590 @@
+import Vector from "../js/Vector.js"; 
+import Color from "../js/Color.js"
+import Signal from "../js/Signal.js";
+import { Tetromino } from './tetrominos.js'
+import Geometry from "../js/Geometry.js";
+
+export default class Board {
+    constructor(Draw, dragon, size=new Vector(1080/2*0.9,1080*0.9)){
+        this.Draw = Draw;
+        this.size = size;
+        this.gridPos = new Vector(1920/2-this.size.x/2,1080/2-this.size.y/2);
+        this.tileSize = 20;
+        this.resetBoard();
+        this.colors = {
+            'grid': new Color(1,0,1,0.5),
+            'blocks': new Color(0.6,1,0.64,1),
+            'danger': new Color(1,1,0,1)
+        }
+        // AI+tetromino logic
+        this.activeTetromino = new Tetromino('random');
+        this.aiTarget = null;
+        // Signals
+        this.onPlace = new Signal();
+        this.onRotate = new Signal();
+        this.onLineclear = new Signal();
+        this.onTopout = new Signal();
+        this.damageDragon = new Signal();
+        this.blockDamaged = new Signal();
+        this.blockBroken = new Signal();
+        this.dragon = dragon;
+    }
+
+    resetBoard(){
+        this.board = [];
+        this.board = Array.from({ length: 20 }, () => Array(10).fill(0));
+    }
+
+    setTile(pos, value){
+        const x = Math.round(pos.x);
+        const y = Math.round(pos.y);
+        if (y >= 0 && y < this.board.length && x >= 0 && x < this.board[0].length) {
+            this.board[y][x] = value;
+        }
+    }
+
+    getTile(pos){
+        const x = Math.round(pos.x);
+        const y = Math.round(pos.y);
+        if (y >= 0 && y < this.board.length && x >= 0 && x < this.board[0].length) {
+            return this.board[y][x];
+        }
+        return undefined;
+    }
+
+
+    checkTile(pos){
+        let tile = this.getTile(pos)
+        if (!tile) return false;
+        if(tile>0 && tile<=1) return true;
+        return false;
+    }
+
+    scanLine(type){
+        // Returns array of booleans: true if line is full (all filled), false otherwise
+        if (type === 'row') {
+            return this.board.map(row => row.every(cell => cell > 0 && cell < 2));
+        } else if (type === 'column') {
+            const cols = this.board[0].length;
+            const rows = this.board.length;
+            let result = [];
+            for (let x = 0; x < cols; x++) {
+                let full = true;
+                for (let y = 0; y < rows; y++) {
+                    if (!(this.board[y][x] > 0 && this.board[y][x] < 2)) {
+                        full = false;
+                        break;
+                    }
+                }
+                result.push(full);
+            }
+            return result;
+        }
+        return [];
+    }
+
+    clearLines(){
+        let cleared = 0;
+        for (let y = this.board.length - 1; y >= 0; y--) {
+            if (this.board[y].every(cell => cell > 0 && cell < 2)) {
+                this.board.splice(y, 1);
+                this.board.unshift(Array(this.board[0].length).fill(0));
+                cleared++;
+                y++; // recheck this row index after shifting
+            }
+        }
+        if(cleared>0){
+            this.onLineclear.emit(cleared)
+        }
+        return cleared;
+    }
+
+    draw(){
+        for (let i = 0; i< 11; i++){
+            this.Draw.line(this.gridPos.add(new Vector(i*this.size.x/10,0)),this.gridPos.add(new Vector(i*this.size.x/10,this.size.y)),this.colors.grid,5)
+        }
+        for (let i = 0; i< 21; i++){
+            this.Draw.line(this.gridPos.add(new Vector(0,i*this.size.x/10)),this.gridPos.add(new Vector(this.size.x,i*this.size.x/10)),this.colors.grid,5)
+        }
+        for (let y = 0; y < this.board.length; y++){
+            for (let x = 0; x < this.board[y].length; x++){
+                if(this.board[y][x]<=0) continue;
+                if(this.board[y][x] < 2){
+                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.blocks.toHex(Math.max(this.board[y][x],0.2)))
+                }else if(this.board[y][x] === 2){
+                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.danger.toHex())
+                }else{
+                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),`rgba(55,55,55,${this.board[y][x]/10})`)
+                }   
+            }
+        }
+        if(this.dragon.keys.pressed('/')){
+            console.log(this.activeTetromino.getPositions())
+        }
+        this.activeTetromino.getPositions().forEach(
+            (pos)=>this.Draw.rect(new Vector(pos.x*this.size.x/10 + this.gridPos.x, pos.y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),new Color(1,1,1,1))
+        )
+    }
+
+    moveTetromino(type='fall',data=new Vector(0,1)){
+        if(type==='fall'){
+            for(let i = 0; i < 0; i++){
+                if (this.activeTetromino === null){
+                    return false;
+                }
+                
+                let canMove = true;
+                for (let part of this.activeTetromino.getPositions()){
+                    if (this.checkTile(part.add(data)) || !this.checkBounds(part.add(data))){
+                        canMove = false;
+                    }
+                }
+                if(canMove){
+                    this.justSpawned = false;
+                    for (let part of this.activeTetromino.getPositions()){
+                        this.setTile(part,0)
+                    }
+                    this.activeTetromino.pos.addS(data)
+                    for (let part of this.activeTetromino.getPositions()){
+                        this.setTile(part,2)
+                    }
+                }else if(type === 'fall'){
+                    for (let part of this.activeTetromino.getPositions()){
+                        this.setTile(part,1)
+                    } 
+                    if(this.justSpawned){
+                        this.resetBoard();
+                        this.onTopout.emit()
+
+                    }
+                    this.activeTetromino = new Tetromino('random');
+                    this.justSpawned = true;
+                    this.onPlace.emit();
+                    this.aiTarget = null;
+                    for (let part of this.activeTetromino.getPositions()){
+                        this.setTile(part, 2);
+                    }
+                }
+            }
+        }
+        
+        if (this.activeTetromino === null){
+            return false;
+        }
+        
+        let canMove = true;
+        for (let part of this.activeTetromino.getPositions()){
+            if (this.checkTile(part.add(data)) || !this.checkBounds(part.add(data))){
+                canMove = false;
+            }
+        }
+        if(canMove){
+            this.justSpawned = false;
+            for (let part of this.activeTetromino.getPositions()){
+                this.setTile(part,0)
+            }
+            this.activeTetromino.pos.addS(data)
+            for (let part of this.activeTetromino.getPositions()){
+                this.setTile(part,2)
+            }
+        }else if(type === 'fall'){
+            for (let part of this.activeTetromino.getPositions()){
+                this.setTile(part,1)
+            } 
+            if(this.justSpawned){
+                this.resets+=1
+                this.resetBoard();
+                this.onTopout.emit()
+            }
+            this.activeTetromino = new Tetromino('random');
+            this.justSpawned = true;
+            this.onPlace.emit()
+            this.aiTarget = null;
+            for (let part of this.activeTetromino.getPositions()){
+                this.setTile(part, 2);
+            }
+        }
+
+    }
+
+    rotateTetromino(dir=1){
+        if (this.activeTetromino === null){
+            return false;
+        }
+        
+        let canMove = true;
+        for (let part of this.activeTetromino.getPositions(dir)){
+            if (this.checkTile(part) || !this.checkBounds(part)){
+                canMove = false;
+            }
+        }
+        if(canMove){
+            for (let part of this.activeTetromino.getPositions(0)){
+                this.setTile(part,0)
+            }
+            for (let part of this.activeTetromino.getPositions(dir)){
+                this.setTile(part,2)
+            }
+            this.onRotate.emit()
+            this.activeTetromino.rotate(1)
+        }
+
+    }   
+
+    checkBounds(pos){
+        if(Math.round(pos.y)>this.board.length-1){
+            return false;
+        }
+        if(Math.round(pos.x)>this.board[Math.round(pos.y)].length-1){
+            return false;
+        }
+        if(Math.round(pos.y)<0){
+            return false;
+        }
+        if(Math.round(pos.x)<0){
+            return false;
+        }
+        return true;
+    }
+
+    getBestMove(tetromino) {
+        let bestScore = -Infinity;
+        let bestMove = {x: 0, rotation: 0};
+
+        // Test all rotations
+        for (let r = 0; r < 4; r++) {
+            let testTet = new Tetromino(tetromino.type);
+            testTet.rotation = tetromino.rotation + r * Math.PI/2;
+
+            // Test all horizontal positions
+            for (let x = -5; x < 10; x++) {
+                testTet.pos = new Vector(4 + x, 0);
+                
+                // Drop tetromino to the bottom
+                while (!this.checkCollision(testTet, new Vector(0,1))) {
+                    testTet.pos.y += 1;
+                }
+
+                let score = this.evaluateBoard(testTet);
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMove = {x: testTet.pos.x - tetromino.pos.x, rotation: r};
+                }
+            }
+        }
+
+        return bestMove;
+    }
+
+    checkCollision(tetromino, delta) {
+        for (let part of tetromino.getPositions()) {
+            let nextPos = part.add(delta);
+            if (!this.checkBounds(nextPos) || this.checkTile(nextPos)) return true;
+        }
+        return false;
+    }
+
+    evaluateBoard(tetromino) {
+        // Simulate the tetromino on a temporary board
+        let tempBoard = this.board.map(row => row.slice());
+        let edgesTouching = 0;
+
+        for (let pos of tetromino.getPositions()) {
+            let x = Math.round(pos.x);
+            let y = Math.round(pos.y);
+            if (y >= 0 && y < tempBoard.length && x >= 0 && x < tempBoard[0].length) {
+                tempBoard[y][x] = 1;
+
+                // Check edges touching other blocks or walls
+                let neighbors = [
+                    [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]
+                ];
+                for (let [nx, ny] of neighbors) {
+                    if (nx < 0 || nx >= 10 || (ny >= 0 && ny < 20 && tempBoard[ny][nx] === 1)) {
+                        edgesTouching++;
+                    }
+                }
+            }
+        }
+
+        let holes = 0;
+        let overhangPenalty = 0;
+        let fullLines = 0;
+        let partialLineBonus = 0;
+        let multiLineBonus = 0;
+        let iColumnPenalty = 0;
+        let heights = Array(10).fill(0);
+
+        for (let x = 0; x < 10; x++) {
+            let blockFound = false;
+            let gapHeight = 0;
+            for (let y = 0; y < 20; y++) {
+                if (tempBoard[y][x] === 1) blockFound = true;
+                else if (blockFound && tempBoard[y][x] === 0) {
+                    holes++;
+                    overhangPenalty += (20 - y) * 2; // double penalty for overhangs
+                }
+
+                if (tempBoard[y][x] === 0) gapHeight++;
+                else {
+                    if (gapHeight >= 1) iColumnPenalty += gapHeight * 3; // punish any overhang gaps heavily
+                    gapHeight = 0;
+                }
+
+                if (x === 0) {
+                    let row = tempBoard[y];
+                    let filled = row.reduce((a, c) => a + (c ? 1 : 0), 0);
+
+                    if (filled === 10) fullLines++;
+                    else if (filled >= 7 && filled < 10) multiLineBonus += filled;
+
+                    let maxRun = 0, currentRun = 0;
+                    for (let i = 0; i < row.length; i++) {
+                        if (row[i] === 1) currentRun++;
+                        else currentRun = 0;
+                        if (currentRun > maxRun) maxRun = currentRun;
+                    }
+                    partialLineBonus += maxRun;
+                }
+
+                if (tempBoard[y][x] === 1 && heights[x] === 0) {
+                    heights[x] = 20 - y;
+                }
+            }
+            if (gapHeight >= 1) iColumnPenalty += gapHeight * 3;
+        }
+
+        // Calculate bumpiness & aggregate height
+        let aggregateHeight = heights.reduce((a, b) => a + b, 0);
+        let bumpiness = heights.reduce((acc, h, i, arr) => i > 0 ? acc + Math.abs(h - arr[i - 1]) : acc, 0);
+
+        // Well analysis
+        let wellScore = 0;
+        for (let x = 0; x < 10; x++) {
+            let leftHeight = x === 0 ? 20 : heights[x - 1];
+            let rightHeight = x === 9 ? 20 : heights[x + 1];
+            if (heights[x] < leftHeight && heights[x] < rightHeight) {
+                let wellDepth = Math.min(leftHeight, rightHeight) - heights[x];
+                if ((leftHeight - heights[x] === 1) && (rightHeight - heights[x] === 1)) {
+                    wellScore -= 10 * wellDepth; // punish 1-wide wells more
+                } else if ((leftHeight - heights[x] >= 2 && rightHeight - heights[x] >= 2)) {
+                    wellScore += 3 * wellDepth; // slightly favor 2+ wide wells
+                }
+            }
+        }
+
+        // Heuristic scoring
+        let score = (fullLines ** 2) * 500
+                + (multiLineBonus * 10)
+                + (partialLineBonus * 5)
+                + (edgesTouching * 20)
+                - (holes * 800)               // stronger hole penalty
+                - (overhangPenalty)      // heavy overhang penalty
+                - (aggregateHeight * 5)
+                - (bumpiness * 5)
+                - (iColumnPenalty * 5)        // heavily punish small gaps under blocks
+                + wellScore
+                - Math.abs(4.5 - tetromino.pos.x) * 2;
+
+        return score;
+    }  
+
+    spawnRandomBlock(maxDepth){
+        this.board[Math.floor(Math.min(Math.random()*(maxDepth),19))][Math.floor(Math.random()*10)] = 10
+    }
+
+    updateAI(){
+        this.applyBestMove();
+    }
+
+    applyBestMove() {
+        if (!this.activeTetromino) return;
+        if (!this.aiTarget) {
+            this.aiTarget = this.getBestMove(this.activeTetromino);
+            this.aiStepX = this.aiTarget.x;
+            this.aiStepR = this.aiTarget.rotation;
+        }
+        // Rotate first
+        if (this.aiStepR > 0) {
+            this.rotateTetromino();
+            this.aiStepR--;
+            return;
+        }
+        
+        // Move horizontally
+        if (this.aiStepX < 0) {
+            this.moveTetromino('move', new Vector(-1,0));
+            this.aiStepX++;
+            return;
+        } else if (this.aiStepX > 0) {
+            this.moveTetromino('move', new Vector(1,0));
+            this.aiStepX--;
+            return;
+        }
+    }
+
+    update(delta) {
+        for (let y = 0; y < this.board.length; y++) {
+            for (let x = 0; x < this.board[y].length; x++) {
+                if (this.board[y][x] <= 0){ 
+                    this.board[y][x] = 0;
+                    continue;
+                }
+                let tileX = x * this.size.x / 10 + this.gridPos.x;
+                let tileY = y * this.size.y / 20 + this.gridPos.y;
+                let tileW = this.size.x / 10;
+                let tileH = this.size.y / 20;
+                
+                
+
+                for(let fireball of this.dragon.fireballs){
+                    if(!fireball) continue;
+                    if(Geometry.rectCollide(fireball.pos,fireball.size,new Vector(tileX,tileY),new Vector(tileW,tileH))){
+                        this.board[y][x] -= Math.max(fireball.power,0);
+                        if(this.board[y][x]<=0){
+                            this.board[y][x]=0;
+                            this.blockBroken.emit();
+                            this.sessionBlocks+=1;
+                            this.dragon.anger+=0.002;
+                            if(this.dragon.anger>1){
+                                this.dragon.anger = 1;
+                            }
+                        }
+                        fireball.power-=0.5;
+                        this.blockDamaged.emit(new Vector(tileX+tileW/2,tileY+tileH/2))
+                    }
+                    if(fireball.power<=0){
+                        fireball.adiós()
+                        this.dragon.power *=1.002;
+                    }
+                }
+
+
+                // --- Horizontal collisions ---
+                // Right side
+                let collided = false
+                if(this.dragon.power < 3){
+                    if (this.dragon.pos.x + this.dragon.vlos.x + this.dragon.size.x >= tileX &&
+                        this.dragon.pos.x <= tileX &&
+                        this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
+                        this.dragon.pos.y + 2 < tileY + tileH
+                    ) {
+                        this.dragon.pos.x = tileX - this.dragon.size.x;
+                        this.dragon.vlos.x *= 0.0001;
+                        collided = true;
+                    }
+                    // Left side
+                    if (this.dragon.pos.x + this.dragon.vlos.x <= tileX + tileW &&
+                        this.dragon.pos.x + this.dragon.size.x >= tileX + tileW &&
+                        this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
+                        this.dragon.pos.y + 2 < tileY + tileH
+                    ) {
+                        this.dragon.pos.x = tileX + tileW;
+                        this.dragon.vlos.x *= 0.0001;
+                        collided = true;
+                    }
+
+                    // --- Vertical collisions ---
+                    // Bottom (floor)
+                    if (this.dragon.pos.y + this.dragon.vlos.y + this.dragon.size.y >= tileY &&
+                        this.dragon.pos.y <= tileY &&
+                        this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
+                        this.dragon.pos.x + 2 < tileX + tileW
+                    ) {
+                        this.dragon.pos.y = tileY - this.dragon.size.y;
+                        this.dragon.vlos.y *= -0.2;
+                        collided = true;
+                    }
+                    // Top (ceiling)
+                    if (this.dragon.pos.y + this.dragon.vlos.y <= tileY + tileH &&
+                        this.dragon.pos.y + this.dragon.size.y >= tileY + tileH &&
+                        this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
+                        this.dragon.pos.x + 2 < tileX + tileW
+                    ) {
+                        this.dragon.pos.y = tileY + tileH;
+                        this.dragon.vlos.y *= -0.2;
+                        collided = true;
+                    }
+                }
+                if(collided && this.board[y][x] >= 5){
+                    this.dragon.health -=1;
+                }
+            }
+        }
+        for (let part of this.activeTetromino.getPositions()){
+            let collided = false
+            let tileX = part.x * this.size.x / 10 + this.gridPos.x;
+            let tileY = part.y * this.size.y / 20 + this.gridPos.y;
+            let tileW = this.size.x / 10;
+            let tileH = this.size.y / 20;
+            if(this.dragon.power < 3){
+                if (this.dragon.pos.x + this.dragon.vlos.x + this.dragon.size.x >= tileX &&
+                    this.dragon.pos.x <= tileX &&
+                    this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
+                    this.dragon.pos.y + 2 < tileY + tileH
+                ) {
+                    this.dragon.pos.x = tileX - this.dragon.size.x;
+                    this.dragon.vlos.x *= 0.0001;
+                    collided = true;
+                }
+                // Left side
+                if (this.dragon.pos.x + this.dragon.vlos.x <= tileX + tileW &&
+                    this.dragon.pos.x + this.dragon.size.x >= tileX + tileW &&
+                    this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
+                    this.dragon.pos.y + 2 < tileY + tileH
+                ) {
+                    this.dragon.pos.x = tileX + tileW;
+                    this.dragon.vlos.x *= 0.0001;
+                    collided = true;
+                }
+
+                // --- Vertical collisions ---
+                // Bottom (floor)
+                if (this.dragon.pos.y + this.dragon.vlos.y + this.dragon.size.y >= tileY &&
+                    this.dragon.pos.y <= tileY &&
+                    this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
+                    this.dragon.pos.x + 2 < tileX + tileW
+                ) {
+                    this.dragon.pos.y = tileY - this.dragon.size.y;
+                    this.dragon.vlos.y *= -0.2;
+                    collided = true;
+                }
+                // Top (ceiling)
+                if (this.dragon.pos.y + this.dragon.vlos.y <= tileY + tileH &&
+                    this.dragon.pos.y + this.dragon.size.y >= tileY + tileH &&
+                    this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
+                    this.dragon.pos.x + 2 < tileX + tileW
+                ) {
+                    this.dragon.pos.y = tileY + tileH;
+                    this.dragon.vlos.y *= -0.2;
+                    collided = true;
+                }
+            }
+            if(collided){
+                this.dragon.health -=1;
+                this.damageDragon.emit()
+            }
+        }
+        this.clearLines()
+        if(this.dragon.power<4){
+            if(this.dragon.pos.y+this.dragon.size.y>this.gridPos.y+this.size.y){
+                this.dragon.pos.y = this.gridPos.y+this.size.y - this.dragon.size.y;
+                if(this.dragon.vlos.y > 0){
+                    this.dragon.vlos.y =0
+                }
+            }
+            if(this.dragon.pos.y<this.gridPos.y){
+                this.dragon.pos.y = this.gridPos.y;
+                if(this.dragon.vlos.y < 0){
+                    this.dragon.vlos.y = 0
+                }
+            }
+            if(this.dragon.pos.x+this.dragon.size.x>this.gridPos.x+this.size.x){
+                this.dragon.pos.x = this.gridPos.x+this.size.x - this.dragon.size.x;
+            }
+            if(this.dragon.pos.x < this.gridPos.x){
+                this.dragon.pos.x = this.gridPos.x;
+            }
+        }
+    }
+}

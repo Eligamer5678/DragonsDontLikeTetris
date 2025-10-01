@@ -1,6 +1,6 @@
-import { Vector } from '../Vector.js';
+import Vector from '../Vector.js';
 
-export class UIRect {
+export default class UIRect {
     constructor(pos,size,layer,color){
         this.pos = pos;
         this.size = size;

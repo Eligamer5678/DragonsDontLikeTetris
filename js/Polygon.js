@@ -1,6 +1,6 @@
-import { Vector } from './Vector.js';
+import Vector from './Vector.js';
 
-export class Polygon {
+export default class Polygon {
     constructor(points, pos = Vector.zero(), scale=Vector.one(), rot=0){
         this.points = points
         this.pos = pos

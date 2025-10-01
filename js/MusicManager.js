@@ -1,4 +1,4 @@
-export class MusicManager {
+export default class MusicManager {
     constructor(soundManager) {
         this.soundManager = soundManager;
         this.sections = [];
@@ -36,6 +36,7 @@ export class MusicManager {
         this.reset(); 
         this.defaultVolume = volume;
         this._playNext();
+        console.log('Starting music...')
     }
 
     /**

@@ -1,4 +1,4 @@
-export let getID = document.getElementById.bind(document);
+export const getID = document.getElementById.bind(document);
 
 export function addEvent(target, item, event, func) {
     if (target === "item" && item instanceof HTMLElement) {
@@ -23,3 +23,4 @@ export function copyToClipboard(text) {
         console.error('Failed to copy: ', err);
     });
 }
+

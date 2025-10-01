@@ -35,9 +35,7 @@ html, body {
     pointer-events: auto;
 }
 
-/* All layer canvases
-   NOTE: do NOT set width/height:100% here — JS will set the canvas pixel size
-   and set the CSS width/height to the same pixel size to avoid scaling artifacts. */
+/* All layer canvases */
 #layers canvas.layer,
 #ui canvas.layer {
     position: absolute;

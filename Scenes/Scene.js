@@ -1,9 +1,8 @@
-export class Scene {
-    constructor(name, Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene) {
+export default class Scene {
+    constructor(name, Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
         this.name = name;
         this.isReady = false;
         this.isPreloaded = false;
-        this.resources = new Map(); // cached resources to keep when switching away
         this.Draw = Draw;
         this.UIDraw = UIDraw;
         this.Saver = saver;
@@ -12,13 +11,15 @@ export class Scene {
         this.switchScene = switchScene;
         this.loadScene = loadScene;
         this.preloadScene = preloadScene;
+        this.removeScene;
+        this.elements = new Map()
     }
 
     /**
      * Called once, asynchronously, to preload assets (images, music, etc). 
      * Return a Promise.
      */
-    async onPreload() {
+    async onPreload(resources=null) {
 
     }
 
@@ -34,7 +35,7 @@ export class Scene {
      * Returns a Map of resources to keep cached (key: resource name, value: resource type).
      */
     onSwitchTo() {
-
+        return null;
     }
 
     /**
@@ -47,6 +48,7 @@ export class Scene {
     draw() {
 
     }
+    
     update(delta) {
 
     }

@@ -1,4 +1,4 @@
-export class Keys { // Key input
+export default class Keys { // Key input
     constructor() {
         this.keys = {};
         this.firstFrame = {};
@@ -27,6 +27,7 @@ export class Keys { // Key input
     }
 
     update(delta) {
+        this.lastDelta = delta;
         for (const k in this.keys) {
             const key = this.keys[k];
             key.time = key.state ? key.time + delta : 0;
@@ -34,14 +35,29 @@ export class Keys { // Key input
     }
 
     pressed(key) {
-        if (this.firstFrame[key]) {
-            this.firstFrame[key] = false;
-            return true;
+        const delta = this.lastDelta || 0;
+        if (key === 'any') {
+            for (const k in this.keys) {
+                if (this.keys[k] && this.keys[k].state && Math.abs(this.keys[k].time - delta) < 1e-6) {
+                    return true;
+                }
+            }
+            return false;
         }
-        return false;
+        const k = this.keys[key];
+        return (k && k.state && Math.abs(k.time - delta) < 1e-6);
     }
 
     released(key) {
+        if (key === 'any') {
+            for (const k in this.releasedFrame) {
+                if (this.releasedFrame[k]) {
+                    this.releasedFrame[k] = false;
+                    return true;
+                }
+            }
+            return false;
+        }
         if (this.releasedFrame[key]) {
             this.releasedFrame[key] = false;
             return true;
@@ -50,6 +66,14 @@ export class Keys { // Key input
     }
 
     held(key, returnTime = false) {
+        if (key === 'any') {
+            for (const k in this.keys) {
+                if (this.keys[k] && this.keys[k].state) {
+                    return returnTime ? this.keys[k].time : true;
+                }
+            }
+            return returnTime ? 0 : false;
+        }
         const k = this.keys[key];
         return (k && k.state) ? (returnTime ? k.time : true) : (returnTime ? 0 : false);
     }

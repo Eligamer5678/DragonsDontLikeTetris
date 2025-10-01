@@ -1,8 +1,9 @@
+    
 
-import { Color } from './color.js';
-import { Vector } from './Vector.js';
+import Color from './Color.js';
+import Vector from './Vector.js';
 
-export class Draw {
+export default class Draw {
     constructor() {
         this.ctx = null;
         this.Scale = new Vector(1, 1); // scaling for coordinates
@@ -96,13 +97,17 @@ export class Draw {
         }
     }
 
+    clear() {
+        const ctx = this._assertCtx('clear');
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    }
     /**
      * Rectangular mask. If invert=true, everything OUTSIDE the rect is kept (even-odd rule).
      * Affects subsequent drawing until clearMask().
      */
     maskRect(pos, size, invert = false) {
-    pos = this.pv(pos.clone())
-    size = this.pv(size.clone())
+        pos = this.pv(pos.clone())
+        size = this.pv(size.clone())
         const ctx = this._assertCtx('maskRect');
         const { x, y } = _asVec(pos);
         const { x: w, y: h } = _asVec(size);
@@ -170,9 +175,9 @@ export class Draw {
 
 
     circle(pos, r, color = '#000000FF', fill = true, width = 1, erase = false) {
-    pos = this.pv(pos.clone());
-    r = this.ps(r);
-    width = this.ps(width);
+        pos = this.pv(pos.clone());
+        r = this.ps(r);
+        width = this.ps(width);
         const ctx = this._assertCtx('circle');
         const { x, y } = _asVec(pos);
         const col = Color.convertColor(color);
@@ -194,9 +199,9 @@ export class Draw {
 
 
     line(start, end, color = '#000000FF', width = 1, erase = false, cap = 'butt') {
-    start = this.pv(start.clone());
-    end = this.pv(end.clone());
-    width = this.ps(width);
+        start = this.pv(start.clone());
+        end = this.pv(end.clone());
+        width = this.ps(width);
         const ctx = this._assertCtx('line');
         const col = Color.convertColor(color);
         ctx.save();
@@ -256,7 +261,11 @@ export class Draw {
         }
         ctx.restore();
     }
-
+    
+    background(color = '#000000FF') {
+        const ctx = this._assertCtx('background');
+        this.rect(new Vector(0, 0), new Vector(ctx.canvas.width / this.Scale.x, ctx.canvas.height / this.Scale.y), color, true);
+    }
 
 
     polygon(points, color = '#000000FF', width = 1, fill = false, erase = false) {
@@ -286,9 +295,9 @@ export class Draw {
     }
 
     text(txt, pos, color = '#000000FF', width = 1, fontSize = 20, options = {}, erase = false) {
-    pos = this.pv(pos.clone());
-    fontSize = this.ps(fontSize);
-    width = this.ps(width);
+        pos = this.pv(pos.clone());
+        fontSize = this.ps(fontSize);
+        width = this.ps(width);
         const ctx = this._assertCtx('text');
         const {
             font = `${fontSize}px Arial`,
@@ -315,8 +324,8 @@ export class Draw {
     }
 
     image(img, pos, size = null, invert = null, rad = 0) {
-    pos = this.pv(pos.clone())
-    size = this.pv(size.clone())
+        pos = this.pv(pos.clone())
+        size = this.pv(size.clone())
         const ctx = this._assertCtx('image');
         const { x, y } = _asVec(pos);
         const w = size?.x ?? img.width;

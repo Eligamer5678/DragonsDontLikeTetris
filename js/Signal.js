@@ -1,4 +1,4 @@
-export class Signal {
+export default class Signal {
     constructor() {
         this.listeners = new Set();
     }

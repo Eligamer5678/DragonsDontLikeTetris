@@ -1,9 +1,9 @@
-import { Vector } from '../Vector.js';
-import { Signal } from '../Signal.js';
-import { Geometry } from '../Geometry.js';
+import Vector from '../Vector.js';
+import Signal from '../Signal.js';
+import Geometry from '../Geometry.js';
 
-export class UIButton {
-    constructor(program,pos,size,layer,keybind=null,baseColor='#444',hoverColor='#555',pressedColor='#222'){
+export default class UIButton {
+    constructor(mouse, keys,pos,size,layer,keybind=null,baseColor='#444',hoverColor='#555',pressedColor='#222'){
         this.pos = pos;
         this.size = size;
         this.baseColor = baseColor ? baseColor : '#444';
@@ -12,10 +12,10 @@ export class UIButton {
         this.color = this.baseColor;
         this.keybind = keybind;
         this.layer = layer;
-        this.mouse = program.mouse;
+        this.mouse = mouse;
         this.trigger = false;
         this.triggered = false;
-        this.keys = program.keys;
+        this.keys = keys;
         this.offset = new Vector(0,0)
         this.visible = true;
 

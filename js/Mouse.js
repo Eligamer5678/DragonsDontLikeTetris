@@ -1,6 +1,6 @@
-import { Vector } from './Vector.js';
+import Vector from './Vector.js';
 
-export class Mouse {
+export default class Mouse {
     constructor(rect, offset = new Vector(0, 0), scale = 1) {
         this.rect = rect;
         this.scale = scale;
@@ -90,7 +90,7 @@ export class Mouse {
     }
 
     pressed(button = null) {
-        if (button === null) {
+        if (button === null || button === 'any') {
             return this.pressed("left") || this.pressed("middle") || this.pressed("right");
         }
         if (this.buttons[button].time > this.prevDelta + 0.001) return false;

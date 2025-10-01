@@ -1,14 +1,13 @@
-import { Geometry } from '../Geometry.js';
+import Geometry from '../Geometry.js';
 
-export class Menu{
-    constructor(program,pos,size,layer,color){
-        this.program = program;
+export default class Menu{
+    constructor(mouse,keys,pos,size,layer,color){
         this.pos = pos;
         this.size = size;
         this.layer = layer;
         this.color = color;
-        this.mouse = program.mouse;
-        this.keys = program.keys;
+        this.mouse = mouse;
+        this.keys = keys;
         this.elements = new Map();
         this.visible = true;
     }
