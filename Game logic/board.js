@@ -28,6 +28,7 @@ export default class Board {
         this.blockDamaged = new Signal();
         this.blockBroken = new Signal();
         this.dragon = dragon;
+        this.glitchColor = new Color(0.9,1,1);
         this.onPlace.connect(()=>this.clearLines())
     }
 
@@ -103,6 +104,48 @@ export default class Board {
     }
 
     draw(){
+        // Draw ghost piece and faint area between ghost and active piece
+        if (this.activeTetromino) {
+            let ghostTet = new Tetromino(this.activeTetromino.type);
+            ghostTet.pos = this.activeTetromino.pos.clone();
+            ghostTet.rotation = this.activeTetromino.rotation;
+            // Drop ghostTet until it collides
+            while (!this.checkCollision(ghostTet, new Vector(0,1))) {
+                ghostTet.pos.y += 1;
+            }
+            // Draw faint area between active and ghost
+            let activePositions = this.activeTetromino.getPositions();
+            let ghostPositions = ghostTet.getPositions();
+            let drawnColumns = [];
+            for (let i = 0; i < activePositions.length; i++) {
+                if(drawnColumns.includes(activePositions[i].x)) continue; // avoid overdrawing columns  
+                let a = activePositions[i];
+                let g = ghostPositions[i];
+                if (a.x === g.x && a.y === g.y) continue; // skip if same position
+                let x = a.x * this.size.x/10 + this.gridPos.x;
+                let y1 = a.y * this.size.y/20 + this.gridPos.y;
+                let y2 = g.y * this.size.y/20 + this.gridPos.y;
+                let rectY = Math.min(y1, y2);
+                let rectH = Math.abs(y2 - y1);
+                if (rectH > 0.1) {
+                    this.Draw.rect(
+                        new Vector(x, rectY),
+                        new Vector(this.size.x/10, rectH),
+                        'rgba(180,180,180,0.12)'
+                    );
+                    drawnColumns.push(a.x);
+                }
+            }
+            // Draw ghost
+            ghostTet.getPositions().forEach(
+                (pos) => this.Draw.rect(
+                    new Vector(pos.x*this.size.x/10 + this.gridPos.x, pos.y*this.size.y/20 + this.gridPos.y),
+                    new Vector(this.size.x/10,this.size.y/20),
+                    'rgba(200,200,200,0.3)'
+                )
+            );
+        }
+        // ...existing code...
         this.Draw.line(this.gridPos.add(new Vector(0,0)),this.gridPos.add(new Vector(this.size.x,0)),this.colors.grid,5)
         this.Draw.line(this.gridPos.add(new Vector(0,0)),this.gridPos.add(new Vector(0,this.size.y)),this.colors.grid,5)
         for (let y = 0; y < this.board.length; y++){
@@ -117,7 +160,8 @@ export default class Board {
                 }else if(this.board[y][x] === 2){
                     this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.danger)
                 }else{
-                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),`rgba(55,55,55,${this.board[y][x]/10})`)
+                    this.glitchColor.d = Math.min(this.board[y][x]/100,0.6);
+                    this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.glitchColor)
                 }   
             }
         }
@@ -343,8 +387,18 @@ export default class Board {
         return score;
     }  
 
-    spawnRandomBlock(maxDepth){
-        this.board[Math.floor(Math.min(Math.random()*(maxDepth),19))][Math.floor(Math.random()*10)] = 10
+    spawnGlitch(){
+        // Get dragon's grid position
+        const dragonGridX = Math.floor((this.dragon.pos.x - this.gridPos.x) / (this.size.x / 10));
+        const dragonGridY = Math.floor((this.dragon.pos.y - this.gridPos.y) / (this.size.y / 20));
+        let tries = 0;
+        let x, y;
+        do {
+            y = Math.floor(Math.random() * 19);
+            x = Math.floor(Math.random() * 10);
+            tries++;
+        } while (Math.abs(x - dragonGridX) < 5 && Math.abs(y - dragonGridY) < 5 && tries < 100);
+        this.board[y][x] = 100;
     }
 
     updateAI(){
@@ -378,40 +432,61 @@ export default class Board {
     }
 
     update(delta) {
+        // --- Fireball collision: loop over fireballs, not tiles ---
+        for (let fireball of this.dragon.fireballs) {
+            if (!fireball) continue;
+            // Compute affected grid range
+            let minX = Math.floor((fireball.pos.x - this.gridPos.x) / (this.size.x / 10));
+            let maxX = Math.floor((fireball.pos.x + fireball.size.x - this.gridPos.x) / (this.size.x / 10));
+            let minY = Math.floor((fireball.pos.y - this.gridPos.y) / (this.size.y / 20));
+            let maxY = Math.floor((fireball.pos.y + fireball.size.y - this.gridPos.y) / (this.size.y / 20));
+            // Clamp to board bounds
+            minX = Math.max(0, minX); maxX = Math.min(9, maxX);
+            minY = Math.max(0, minY); maxY = Math.min(19, maxY);
+
+            for (let y = minY; y <= maxY; y++) {
+                for (let x = minX; x <= maxX; x++) {
+                    if (this.board[y][x] <= 0) continue;
+                    let tileX = x * this.size.x / 10 + this.gridPos.x;
+                    let tileY = y * this.size.y / 20 + this.gridPos.y;
+                    let tileW = this.size.x / 10;
+                    let tileH = this.size.y / 20;
+                    if (Geometry.rectCollide(fireball.pos, fireball.size, new Vector(tileX, tileY), new Vector(tileW, tileH))) {
+                        this.board[y][x] -= Math.max(fireball.power, 0);
+                        if (this.board[y][x] <= 0) {
+                            this.board[y][x] = 0;
+                            this.blockBroken.emit();
+                            this.sessionBlocks += 1;
+                            this.dragon.anger *= 1.002;
+                            if (this.dragon.anger > 1) this.dragon.anger = 1;
+                        }
+                        fireball.power -= 0.5;
+                        this.blockDamaged.emit(new Vector(tileX + tileW / 2, tileY + tileH / 2));
+                    }
+                }
+            }
+            if (fireball.power <= 0) {
+                fireball.adiós();
+                this.dragon.power *= 1.002;
+            }
+        }
+
+        // --- Tile/dragon collision: unchanged ---
         for (let y = 0; y < this.board.length; y++) {
             for (let x = 0; x < this.board[y].length; x++) {
                 if (this.board[y][x] <= 0 || !this.board[y][x]) { 
                     this.board[y][x] = 0;
                     continue;
                 }
+                if(this.board[y][x]>2&&this.board[y][x]<5){//Glitched blocks
+                    this.board[y][x] = 0;
+                    this.dragon.health +=5;
+                    this.dragon.power += 0.05;
+                }
                 let tileX = x * this.size.x / 10 + this.gridPos.x;
                 let tileY = y * this.size.y / 20 + this.gridPos.y;
                 let tileW = this.size.x / 10;
                 let tileH = this.size.y / 20;
-                
-                
-
-                for(let fireball of this.dragon.fireballs){
-                    if(!fireball) continue;
-                    if(Geometry.rectCollide(fireball.pos,fireball.size,new Vector(tileX,tileY),new Vector(tileW,tileH))){
-                        this.board[y][x] -= Math.max(fireball.power,0);
-                        if(this.board[y][x]<=0){
-                            this.board[y][x]=0;
-                            this.blockBroken.emit();
-                            this.sessionBlocks+=1;
-                            this.dragon.anger+=0.002;
-                            if(this.dragon.anger>1){
-                                this.dragon.anger = 1;
-                            }
-                        }
-                        fireball.power-=0.5;
-                        this.blockDamaged.emit(new Vector(tileX+tileW/2,tileY+tileH/2))
-                    }
-                    if(fireball.power<=0){
-                        fireball.adiós()
-                        this.dragon.power *=1.002;
-                    }
-                }
 
 
                 // --- Horizontal collisions ---
@@ -461,10 +536,11 @@ export default class Board {
                     }
                 }
                 if(collided && this.board[y][x] >= 5){
-                    this.dragon.health -=1;
+                    this.dragon.health -=0.5;
                 }
             }
         }
+
         for (let part of this.activeTetromino.getPositions()){
             let collided = false
             let tileX = part.x * this.size.x / 10 + this.gridPos.x;
@@ -515,7 +591,7 @@ export default class Board {
                 }
             }
             if(collided){
-                this.dragon.health -=1;
+                this.dragon.health -= 1;
                 this.damageDragon.emit()
             }
         }

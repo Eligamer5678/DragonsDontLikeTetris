@@ -4,6 +4,8 @@ import Color from '../js/Color.js';
 import Board from '../Game logic/board.js';
 import { Dragon,Appicon,FireBall,Fragment } from '../Game logic/sprites.js';
 import Timer from '../js/Timer.js';
+import { Particle } from '../Game logic/Particle.js';
+
 
 export class GameScene extends Scene {
     
@@ -11,11 +13,13 @@ export class GameScene extends Scene {
         super('game', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
         this.loaded = 0;
         this.elements = new Map()
+        
     }
     
     async onPreload(resources=null) {
 
     }
+
     onSwitchTo() {
         // Disconnect debug signals when switching out of this scene
         this.dragon.reset(new Vector(1920/2,1080/2));
@@ -47,6 +51,7 @@ export class GameScene extends Scene {
         resources.set('dragon',this.dragon)
         return resources; 
     }
+
     onSwitchFrom(resources) {
         if (!resources) {
             console.error('No resources...');
@@ -111,13 +116,32 @@ export class GameScene extends Scene {
         this.createUI()
         this.AITimer = new Timer('loop', 0.1);
         this.AITimer.onLoop.connect(() => this.Board.updateAI());
+
+        this.glitchTimer = new Timer('loop', 1);
+        this.glitchTimer.onLoop.connect(() => this.Board.spawnGlitch());
+        this.glitchTimer.start();
+        
         this.fallTimer = new Timer('loop', 0.2);
+
         this.sessionTimer = new Timer('stopwatch');
         this.fallTimer.onLoop.connect(() => this.Board.moveTetromino('fall'));
         this.AITimer.start();
         this.sessionTimer.start();
         this.fallTimer.start();
         this.frameCount = 0;
+        // Particle system: spawn particles over time
+        this.particles = [];
+        this.particleTimer = new Timer('loop', 0.05);
+        this.particleTimer.onLoop.connect(() => {
+            if (this.particles.length < 40) {
+                let pos = new Vector(Math.random() * 1920, Math.random() * 1080);
+                let vel = new Vector((Math.random()-0.5)*30, (Math.random()-0.5)*30);
+                let size = 4 + Math.random() * 8;
+                let color = new Color(Math.random(), Math.random(), Math.random(), 1);
+                this.particles.push(new Particle(this.Draw, pos, vel, size, color));
+            }
+        });
+        this.particleTimer.start();
         
 
         // Session data
@@ -176,9 +200,7 @@ export class GameScene extends Scene {
 
         /** Console commands & dev tools */
         window.Debug.createSignal('setPower',(e)=>{this.dragon.power = e;});
-        window.Debug.createSignal('killDragon',()=>{
-            this.dragon.health = 0;
-        });
+        window.Debug.createSignal('setTime',(e)=>{this.sessionTimer.time = e;});
         window.Debug.createSignal('killDragon',()=>{
             this.dragon.health = 0;
         });
@@ -210,6 +232,24 @@ export class GameScene extends Scene {
         window.Debug.createSignal('healthy',()=>{
             this.dragon.lockHp = !this.dragon.lockHp;
         });
+        window.Debug.createSignal('memory',()=>{
+            let count = 0;
+            function logMemory() {
+                if (window.performance && window.performance.memory) {
+                    const mem = window.performance.memory;
+                    const usedMB = mem.usedJSHeapSize / 1048576;
+                    const totalMB = mem.totalJSHeapSize / 1048576;
+                    console.log(`Frame ${count+1}: Memory used: ${usedMB.toFixed(2)} MB / ${totalMB.toFixed(2)} MB`);
+                } else {
+                    console.log('performance.memory API not available in this browser.');
+                }
+                count++;
+                if (count < 50) {
+                    requestAnimationFrame(logMemory);
+                }
+            }
+            logMemory();
+        });
         
     }
 
@@ -218,10 +258,22 @@ export class GameScene extends Scene {
         this.AITimer.update(delta);
         this.fallTimer.update(delta);
         this.sessionTimer.update(delta);
+        this.particleTimer.update(delta);
+        this.glitchTimer.update(delta);
         this.frameCount += 1;
+        if(this.sessionTimer.getTime()>300){
+            this.glitchTimer.endTime = 1/((this.sessionTimer.getTime()-299)/15)
+        }
+        else{
+            this.glitchTimer.time = 0;
+        }
         if(!this.SPEED){
             this.AITimer.endTime = 1/(10*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
             this.fallTimer.endTime = 1/(5*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
+        }
+        if(this.sessionTimer.getTime()>100){
+            this.AITimer.endTime = 0.009
+            this.fallTimer.endTime = 0.018
         }
         if(this.keys.pressed('any') || this.mouse.pressed('any')){
             this.musician.resume()
@@ -240,6 +292,19 @@ export class GameScene extends Scene {
         if(this.dragon.power>5){
             this.switchScene('desktop');
         }
+        // Update particles
+        for (let p of this.particles) p.update(delta);
+        // Remove dead particles and respawn
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            if (!this.particles[i].isAlive()) {
+                // Respawn at random position
+                let pos = new Vector(Math.random() * 1920, Math.random() * 1080);
+                let vel = new Vector((Math.random()-0.5)*30, (Math.random()-0.5)*30);
+                let size = 4 + Math.random() * 8;
+                let color = new Color(Math.random(), Math.random(), Math.random(), 1);
+                this.particles[i] = new Particle(this.Draw, pos, vel, size, color);
+            }
+        }
     }
 
     createUI(){
@@ -254,6 +319,8 @@ export class GameScene extends Scene {
             this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
             this.Draw.image(this.BackgroundImages['background'],Vector.zero(),new Vector(1920,1080))
             this.Draw.text(Math.round(this.sessionTimer.getTime()*100)/100,new Vector(1920/2,1080/2),this.settings.colors.timer,1,100,{'align':'center','baseline':'middle'})
+            // Draw particles
+            for (let p of this.particles) p.draw();
             this.Board.draw()
         }
         if(this.lineMessages.length>15){

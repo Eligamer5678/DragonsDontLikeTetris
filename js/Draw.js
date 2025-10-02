@@ -355,7 +355,7 @@ export default class Draw {
         ctx.restore();
     }
 
-    image(img, pos, size = null, invert = null, rad = 0) {
+    image(img, pos, size = null, invert = null, rad = 0, opacity = 1) {
         pos = this.pv(pos.clone())
         size = this.pv(size.clone())
         const ctx = this._assertCtx('image');
@@ -364,6 +364,7 @@ export default class Draw {
         const h = size?.y ?? img.height;
 
         ctx.save();
+        ctx.globalAlpha *= opacity;
 
         // Move to the image position
         ctx.translate(x + w / 2, y + h / 2);

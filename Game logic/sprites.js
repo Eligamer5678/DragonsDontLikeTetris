@@ -1,6 +1,7 @@
 import Signal from "../js/Signal.js";
 import Vector from "../js/Vector.js";
 import Geometry from "../js/Geometry.js";
+import { TET } from "../js/Support.js";
 
 export class Appicon {
     constructor(draw,pos,size,image){
@@ -138,7 +139,7 @@ export class Dragon {
             this.fireballs.push(fire)
         }
         if(this.power>2){
-            this.health+=1
+            this.health+=this.power*delta
         }
         if(this.health>100&&this.lockHp){
             this.health = 100;
@@ -196,6 +197,10 @@ export class FireBall {
         this.pos.addS(this.vlos.mult(this.speed * delta))
         this.size = new Vector(1,1).mult(Math.min(this.power,5)*50)
         if(!Geometry.rectCollide(Vector.zero(),new Vector(1920,1080),this.pos,this.size)){
+            this.adiós()
+        }
+        this.power-=1*delta;
+        if(this.power<=0){
             this.adiós()
         }
     }
