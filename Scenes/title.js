@@ -5,8 +5,11 @@ import MusicManager from '../js/MusicManager.js'
 import Color from '../js/Color.js';
 import UIButton from '../js/UI/Button.js';
 import UISlider from '../js/UI/Slider.js';
+import UIRect from '../js/UI/Rect.js';
 import UIImage from '../js/UI/Image.js';
 import Menu from '../js/UI/Menu.js';
+import { Dragon } from '../Game logic/sprites.js';
+import Geometry from '../js/Geometry.js';
 
 export class TitleScene extends Scene {
     constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
@@ -166,6 +169,7 @@ export class TitleScene extends Scene {
         console.log(`Firing narrator...`)
         const narratorFiles = [
             ["WhatIsThis2", 'Assets/narrator/WhatIsThis2.wav'],
+            ["WhatIsThis1", 'Assets/narrator/WhatIsThis1.wav'],
             ["This isnt dungions & dragons 1", "Assets/narrator/This isn't dungions & dragons 1.wav"],
             ["This isnt dungions & dragons 2", "Assets/narrator/This isn't dungions & dragons 2.wav"],
             ["Stop destroying the blocks 1", 'Assets/narrator/Stop destroying the blocks 1.wav'],
@@ -245,6 +249,8 @@ export class TitleScene extends Scene {
     onReady() {
         this.isReady = true;
         this.createUI()
+        this.dragon = new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(690,75),this.SpriteImages)
+        this.dragon.vlos = new Vector(0.0001,0);
     }
 
     createUI(){
@@ -262,6 +268,8 @@ export class TitleScene extends Scene {
         })
         this.elements.set('startButton',startButton)
         this.elements.set('modifierButton',modifierButton)
+        let rect = new UIRect(new Vector(680,115),new Vector(60,20),0,'#FF000000')
+        this.elements.set('debug-rect',rect)
         this.createPauseMenu()
     }
 
@@ -358,6 +366,10 @@ export class TitleScene extends Scene {
         for (const elm of sortedElements) {
             elm.draw(this.UIDraw);
         }
+        this.UIDraw.useCtx('overlays')
+        this.UIDraw.clear()
+        this.dragon.draw()
+        this.UIDraw.useCtx('UI')
     }
 
     update(delta) {
@@ -372,8 +384,15 @@ export class TitleScene extends Scene {
         this.mouse.setMask(0);
         this.mouse.setPower(0);
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        for (let elm of sortedElements){
+        this.dragon.update(delta);
+        for (let elm of sortedElements) {
             elm.update(delta);
+            let collision = Geometry.spriteToTile(this.dragon.pos.clone(), this.dragon.vlos.clone(), this.dragon.size, elm.pos, elm.size);
+            if (collision) {
+                this.dragon.pos = collision.pos;
+                this.dragon.vlos = collision.vlos;
+            }
         }
+        
     }
 }

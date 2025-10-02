@@ -6,6 +6,7 @@ import { Dragon,Appicon,FireBall,Fragment } from '../Game logic/sprites.js';
 import Timer from '../js/Timer.js';
 
 export class GameScene extends Scene {
+    
     constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
         super('game', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
         this.loaded = 0;
@@ -15,7 +16,37 @@ export class GameScene extends Scene {
     async onPreload(resources=null) {
 
     }
+    onSwitchTo() {
+        // Disconnect debug signals when switching out of this scene
+        this.dragon.reset(new Vector(1920/2,1080/2));
+        this.Board.reset();
+        this.sessionTimer.reset();
+        this.deaths = 0;
+        this.aiScore = 0;
+        this.lineMessages = [];
+        this.resets = 0;
+        this.sessionBlocks = 0;
+        window.Debug.disconnectSignal('setPower');
+        window.Debug.disconnectSignal('killDragon');
+        window.Debug.disconnectSignal('fast');
+        window.Debug.disconnectSignal('slow');
+        window.Debug.disconnectSignal('healthy');
 
+        this.Draw.clear()
+        this.UIDraw.clear()
+        let resources = new Map();
+        resources.set('settings', this.settings)
+        resources.set('backgrounds',this.BackgroundImages)
+        resources.set('sprites',this.SpriteImages)
+        resources.set('soundguy',this.soundGuy)
+        resources.set('musician',this.musician)
+        resources.set('conductor',this.conductor)
+        resources.set('narrator',this.narrator)
+        resources.set('pause',this.elements.get('pause'))
+        resources.set('settings-button',this.elements.get('settings-button'))
+        resources.set('dragon',this.dragon)
+        return resources; 
+    }
     onSwitchFrom(resources) {
         if (!resources) {
             console.error('No resources...');
@@ -43,6 +74,35 @@ export class GameScene extends Scene {
             }
             if (log) console.log(`Loaded: ${key}`);
         }
+
+        // Reconnect debug signals when switching into this scene
+        window.Debug.createSignal('setPower',(e)=>{this.dragon.power = e;});
+        window.Debug.createSignal('killDragon',()=>{this.dragon.health = 0;});
+        window.Debug.createSignal('fast',()=>{
+            this.fallTimer.endTime = 0.01;
+            this.AITimer.endTime = 0.01;
+            if(this.SPEED === false){
+                this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
+                this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
+            }
+            this.SPEED = true;
+        });
+        window.Debug.createSignal('slow',()=>{
+            if(this.SPEED === true){
+                this.fallTimer.onLoop.disconnect('fall1');
+                this.fallTimer.onLoop.disconnect('fall2');
+                this.fallTimer.onLoop.disconnect('fall3');
+                this.AITimer.onLoop.disconnect('ai1');
+                this.AITimer.onLoop.disconnect('ai2');
+                this.AITimer.onLoop.disconnect('ai3');
+            }
+            this.SPEED = false;
+        });
+        window.Debug.createSignal('healthy',()=>{this.dragon.lockHp = !this.dragon.lockHp;});
     }
 
 
@@ -58,6 +118,7 @@ export class GameScene extends Scene {
         this.sessionTimer.start();
         this.fallTimer.start();
         this.frameCount = 0;
+        
 
         // Session data
         this.deaths = 0;
@@ -112,6 +173,43 @@ export class GameScene extends Scene {
         this.Board.onRotate.connect(()=>this.soundGuy.play('rotate'))
         this.Board.blockBroken.connect(()=>{this.soundGuy.play('break');this.sessionBlocks+=1;})
         this.Board.blockDamaged.connect(()=>this.soundGuy.play('fireball'))
+
+        /** Console commands & dev tools */
+        window.Debug.createSignal('setPower',(e)=>{this.dragon.power = e;});
+        window.Debug.createSignal('killDragon',()=>{
+            this.dragon.health = 0;
+        });
+        window.Debug.createSignal('killDragon',()=>{
+            this.dragon.health = 0;
+        });
+        this.SPEED = false;
+        window.Debug.createSignal('fast',()=>{
+            this.fallTimer.endTime = 0.01;
+            this.AITimer.endTime = 0.01;
+            if(this.SPEED === false){
+            this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
+            this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
+            this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
+            this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
+            this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
+            this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
+            }
+            this.SPEED = true;
+        });
+        window.Debug.createSignal('slow',()=>{
+            if(this.SPEED === true){
+                this.fallTimer.onLoop.disconnect('fall1');
+                this.fallTimer.onLoop.disconnect('fall2');
+                this.fallTimer.onLoop.disconnect('fall3');
+                this.AITimer.onLoop.disconnect('ai1');
+                this.AITimer.onLoop.disconnect('ai2');
+                this.AITimer.onLoop.disconnect('ai3');
+            }
+            this.SPEED = false;
+        });
+        window.Debug.createSignal('healthy',()=>{
+            this.dragon.lockHp = !this.dragon.lockHp;
+        });
         
     }
 
@@ -121,8 +219,10 @@ export class GameScene extends Scene {
         this.fallTimer.update(delta);
         this.sessionTimer.update(delta);
         this.frameCount += 1;
-        this.AITimer.endTime = 1/(10*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
-        this.fallTimer.endTime = 1/(5*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
+        if(!this.SPEED){
+            this.AITimer.endTime = 1/(10*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
+            this.fallTimer.endTime = 1/(5*Math.log10(Math.max(1,this.sessionTimer.getTime())**2))
+        }
         if(this.keys.pressed('any') || this.mouse.pressed('any')){
             this.musician.resume()
         }
@@ -136,6 +236,9 @@ export class GameScene extends Scene {
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
         for (let elm of sortedElements){
             elm.update(delta);
+        }
+        if(this.dragon.power>5){
+            this.switchScene('desktop');
         }
     }
 
@@ -153,13 +256,14 @@ export class GameScene extends Scene {
             this.Draw.text(Math.round(this.sessionTimer.getTime()*100)/100,new Vector(1920/2,1080/2),this.settings.colors.timer,1,100,{'align':'center','baseline':'middle'})
             this.Board.draw()
         }
+        if(this.lineMessages.length>15){
+            this.lineMessages.shift();
+        }
         if(!((this.frameCount-21)%20)){
             this.UIDraw.rect(new Vector(0,0),new Vector(708,1080),null,true,0,true);
             this.UIDraw.image(this.BackgroundImages['ui2'],Vector.zero(),new Vector(708,1080))
             this.UIDraw.text(`Score: ${Math.round(this.aiScore)}`,new Vector(80,300),"#999999ff",1,55,{'align':'start'})
-            if(this.lineMessages.length>15){
-                this.lineMessages.shift();
-            }
+            
             
             for(let l = 0; l<this.lineMessages.length; l++){
                 this.UIDraw.text(this.lineMessages[l],new Vector(80,440+l*40),"#999999ff",1,35,{'align':'start'})

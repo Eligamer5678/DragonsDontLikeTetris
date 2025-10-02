@@ -104,10 +104,13 @@ export default class Board {
 
     draw(){
         this.Draw.line(this.gridPos.add(new Vector(0,0)),this.gridPos.add(new Vector(this.size.x,0)),this.colors.grid,5)
+        this.Draw.line(this.gridPos.add(new Vector(0,0)),this.gridPos.add(new Vector(0,this.size.y)),this.colors.grid,5)
         for (let y = 0; y < this.board.length; y++){
-            if(y<11)this.Draw.line(this.gridPos.add(new Vector(y*this.size.x/10,0)),this.gridPos.add(new Vector(y*this.size.x/10,this.size.y)),this.colors.grid,5);
             this.Draw.line(this.gridPos.add(new Vector(0,(y+1)*this.size.x/10)),this.gridPos.add(new Vector(this.size.x,(y+1)*this.size.x/10)),this.colors.grid,5)
             for (let x = 0; x < this.board[y].length; x++){
+                if(y===0){
+                    this.Draw.line(this.gridPos.add(new Vector((x+1)*this.size.x/10,0)),this.gridPos.add(new Vector((x+1)*this.size.x/10,this.size.y)),this.colors.grid,5);
+                }
                 if(this.board[y][x]<=0) {this.board[y][x] = 0;continue;}
                 if(this.board[y][x] < 2){
                     this.Draw.rect(new Vector(x*this.size.x/10 + this.gridPos.x, y*this.size.y/20 + this.gridPos.y),new Vector(this.size.x/10,this.size.y/20),this.colors.blocks.toHex(Math.max(this.board[y][x],0.2)))

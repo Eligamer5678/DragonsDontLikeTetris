@@ -1,4 +1,5 @@
 import Vector from './Vector.js';
+import Signal from './Signal.js';
 function getCallerLocation(stackShift = 3) {
     // Create a new error to get the stack trace
     const err = new Error();
@@ -82,6 +83,9 @@ class Debug {
             document.body.appendChild(this.input);
         }
 
+        // Keyword signals map
+        this.signals = new Map();
+
         // Ensure wheel events on the input are handled (whether the input pre-existed or was just created).
         this.logs = [];
         
@@ -124,6 +128,31 @@ class Debug {
         this._setupInput();
         this._setupToggle();
     }
+    /**
+     * Register a keyword and its action. When the keyword is entered in the debug input, the action will be executed.
+     * The action will receive any parameters entered, e.g. setPower(5) will call action(5).
+     * @param {string} keyword - The keyword to trigger the action.
+     * @param {function} action - The function to execute when the keyword is entered. Receives parameters.
+     */
+    createSignal(keyword, action) {
+        if (typeof keyword !== 'string' || typeof action !== 'function') {
+            this.warn('createSignal expects (string, function)');
+            return;
+        }
+        this.signals.set(keyword.toLowerCase(), action);
+    }
+
+    /**
+     * Remove a signal by keyword.
+     * @param {string} keyword - The keyword to remove.
+     */
+    disconnectSignal(keyword) {
+        if (typeof keyword !== 'string') {
+            this.warn('disconnectSignal expects a string keyword');
+            return;
+        }
+        this.signals.delete(keyword.toLowerCase());
+    }
     try() {
         if (!this.visible) return;
         this.element.style.background = '#000000ff';
@@ -158,16 +187,44 @@ class Debug {
         this.input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 const val = this.input.value.trim();
-                if (val.toLowerCase() === 'clear') {
+                // Check for keyword with parameters, e.g. setPower(5)
+                const match = val.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*\((.*)\)$/);
+                let keyword, args = [];
+                if (match) {
+                    keyword = match[1].toLowerCase();
+                    // Parse arguments: split by comma, trim, and try to eval each
+                    if (match[2].trim()) {
+                        args = match[2].split(',').map(s => {
+                            s = s.trim();
+                            try {
+                                // Try to eval numbers, booleans, etc.
+                                return eval(s);
+                            } catch {
+                                return s;
+                            }
+                        });
+                    }
+                } else {
+                    keyword = val.toLowerCase();
+                }
+                if (keyword === 'clear') {
                     this.logs = [];
                     this.element.textContent = '';
                     console.log('                ')
                     console.log('End of message stream')
                     console.log('                ')
-                } else if (val.toLowerCase() === 'showdom') {
+                } else if (keyword === 'showdom') {
                     const domLines = this._getDomTreeLines(document, 0);
                     for (let line of domLines) {
                         this.log(line);
+                    }
+                } else if (this.signals.has(keyword)) {
+                    // If keyword matches a registered signal, run its action with parameters
+                    try {
+                        this.signals.get(keyword)(...args);
+                        this.log(`[Signal] Executed action for keyword: ${val}`);
+                    } catch (err) {
+                        this.error(`Signal action error for '${val}': ${err}`);
                     }
                 } else if (val) {
                     try {

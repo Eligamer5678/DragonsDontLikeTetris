@@ -43,6 +43,7 @@ export class Dragon {
         this.big = false;
         this.heavy = false;
         this.fireballTimer = 5
+        this.lockHp = true;
         this.spin = 0;
         this.updraft = 0;
         this.vlos = new Vector(0,0);
@@ -139,8 +140,11 @@ export class Dragon {
         if(this.power>2){
             this.health+=1
         }
-        if(this.health>100){
+        if(this.health>100&&this.lockHp){
             this.health = 100;
+        }
+        if(this.health>320&&!this.lockHp){
+            this.health = 320;
         }
         this.vlos.x *= 0.8
         for(let i = this.fireballs.length-1; i>0; i--){
@@ -192,9 +196,6 @@ export class FireBall {
         this.pos.addS(this.vlos.mult(this.speed * delta))
         this.size = new Vector(1,1).mult(Math.min(this.power,5)*50)
         if(!Geometry.rectCollide(Vector.zero(),new Vector(1920,1080),this.pos,this.size)){
-            this.adiós()
-        }
-        if(!Geometry.rectCollide(new Vector(730,0),new Vector(470,1080),this.pos,this.size) && this.power<5){
             this.adiós()
         }
     }
