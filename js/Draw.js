@@ -196,9 +196,6 @@ export default class Draw {
             this._maskDepth--;
         }
     }
-
-
-
     circle(pos, r, color = '#000000FF', fill = true, width = 1, erase = false) {
         pos = this.pv(pos.clone());
         r = this.ps(r);
@@ -337,11 +334,15 @@ export default class Draw {
             baseline = 'alphabetic',
             fill = true,
             strokeWidth = width, // pass down our width param
+            italics = false,
         } = options;
         ctx.save();
         ctx.globalCompositeOperation = erase ? 'destination-out' : 'source-over';
         const col = Color.convertColor(erase ? '#000000FF' : color);
-        ctx.font = font;
+        // If italics is requested, prepend 'italic ' to the font string
+        let fontStr = font;
+        if (italics) fontStr = 'italic ' + fontStr;
+        ctx.font = fontStr;
         ctx.textAlign = align;
         ctx.textBaseline = baseline;
         if (fill) {

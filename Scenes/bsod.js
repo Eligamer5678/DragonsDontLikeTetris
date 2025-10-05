@@ -39,7 +39,6 @@ export class BSODScene extends Scene {
             return;
         }
         for (const [key, value] of resources.entries()) {
-            let log = true;
             switch (key) {
                 case 'settings': this.settings = value; break;
                 case 'backgrounds': this.BackgroundImages = value; break;
@@ -53,7 +52,6 @@ export class BSODScene extends Scene {
                 case 'dragon': this.dragon = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
-            if (log) console.log(`Loaded: ${key}`);
         }
     }
 
@@ -78,7 +76,6 @@ export class BSODScene extends Scene {
         this.mouse.setMask(0);
         this.mouse.setPower(0);
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        console.log(sortedElements);
         for (let elm of sortedElements){
             elm.update(delta);
         }

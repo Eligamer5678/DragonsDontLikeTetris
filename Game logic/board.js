@@ -27,6 +27,7 @@ export default class Board {
         this.damageDragon = new Signal();
         this.blockDamaged = new Signal();
         this.blockBroken = new Signal();
+        this.dmgMult = 1;
         this.dragon = dragon;
         this.glitchColor = new Color(0.9,1,1);
         this.onPlace.connect(()=>this.clearLines())
@@ -206,9 +207,7 @@ export default class Board {
     }
 
     rotateTetromino(dir=1){
-        if (this.activeTetromino === null){
-            return false;
-        }
+        if (this.activeTetromino === null) return false;
         
         let canMove = true;
         for (let part of this.activeTetromino.getPositions(dir)){
@@ -230,18 +229,10 @@ export default class Board {
     }   
 
     checkBounds(pos){
-        if(Math.round(pos.y)>this.board.length-1){
-            return false;
-        }
-        if(Math.round(pos.x)>this.board[Math.round(pos.y)].length-1){
-            return false;
-        }
-        if(Math.round(pos.y)<0){
-            return false;
-        }
-        if(Math.round(pos.x)<0){
-            return false;
-        }
+        if(Math.round(pos.y)>this.board.length-1)return false;
+        if(Math.round(pos.x)>this.board[Math.round(pos.y)].length-1) return false;
+        if(Math.round(pos.y)<0) return false;
+        if(Math.round(pos.x)<0) return false;
         return true;
     }
 
@@ -457,7 +448,7 @@ export default class Board {
                             this.board[y][x] = 0;
                             this.blockBroken.emit();
                             this.sessionBlocks += 1;
-                            this.dragon.anger *= 1.002;
+                            this.dragon.anger *= 1.0015;
                             if (this.dragon.anger > 1) this.dragon.anger = 1;
                         }
                         fireball.power -= 0.5;
@@ -468,6 +459,7 @@ export default class Board {
             if (fireball.power <= 0) {
                 fireball.adiós();
                 this.dragon.power *= 1.002;
+                this.dragon.anger += 0.005;
             }
         }
 
@@ -492,7 +484,7 @@ export default class Board {
                 // --- Horizontal collisions ---
                 // Right side
                 let collided = false
-                if(this.dragon.power < 3){
+                if(this.dragon.power < 3 || this.board[y][x] >=5){
                     if (this.dragon.pos.x + this.dragon.vlos.x + this.dragon.size.x >= tileX &&
                         this.dragon.pos.x <= tileX &&
                         this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
@@ -536,7 +528,7 @@ export default class Board {
                     }
                 }
                 if(collided && this.board[y][x] >= 5){
-                    this.dragon.health -=0.5;
+                    this.dragon.health -=0.5*this.dmgMult;
                 }
             }
         }
@@ -591,7 +583,7 @@ export default class Board {
                 }
             }
             if(collided){
-                this.dragon.health -= 1;
+                this.dragon.health -= 1*this.dmgMult;
                 this.damageDragon.emit()
             }
         }

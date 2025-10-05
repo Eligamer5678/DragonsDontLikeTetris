@@ -10,6 +10,7 @@ import UIImage from '../js/UI/Image.js';
 import Menu from '../js/UI/Menu.js';
 import { Dragon } from '../Game logic/sprites.js';
 import Geometry from '../js/Geometry.js';
+import LoadingOverlay from '../js/UI/LoadingOverlay.js';
 
 export class TitleScene extends Scene {
     constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
@@ -43,6 +44,7 @@ export class TitleScene extends Scene {
         }
         this.settings = this.defaultSaveData.settings;
         this.elements = new Map()
+        
     }
     
     async onPreload(resources=null) {
@@ -50,18 +52,49 @@ export class TitleScene extends Scene {
         this.narrator = new SoundManager()
         this.musician = new SoundManager()
         this.conductor = new MusicManager(this.musician)
-        await this.loadImages()
-        await this.loadNarrator()
-        await this.loadSounds()
-        await this.loadMusic()
+        // Ensure skipLoads flag exists (default false) and register a shortcut signal
+        window.Debug.addFlag('skipLoads', false);
+        window.Debug.createSignal('skip', ()=>{ window.Debug.addFlag('skipLoads', true); });
+
+        // Create and show loading overlay
+        try {
+            this._loadingOverlay = document.querySelector('loading-overlay') || new LoadingOverlay();
+            if (!document.body.contains(this._loadingOverlay)) document.body.appendChild(this._loadingOverlay);
+            this._loadingOverlay.setTitle('Dragons Don\'t Like Tetris');
+            this._loadingOverlay.setMessage('Starting...');
+            this._loadingOverlay.setProgress(0);
+            this._loadingOverlay.show();
+        } catch (e) {
+            console.warn('Could not create loading overlay:', e);
+        }
+    await this.loadImages()
+    this._loadingOverlay && this._loadingOverlay.setProgress(0.25);
+    this._loadingOverlay && this._loadingOverlay.setMessage('Loading sounds...');
+    await this.loadSounds()
+    this._loadingOverlay && this._loadingOverlay.setProgress(0.5);
+        if(window.Debug.getFlag('skipLoads')===false){
+            await this.loadNarrator()
+            await this.loadMusic()
+        }else{  
+            this.loaded+=2;
+        }
         if(this.loaded>=3){
             console.log('Finished loading')
         }
-        this.conductor.start(0.5);
+        try {
+            // Only start the conductor if music was loaded or if the user hasn't skipped loads
+            if (!window.Debug || !window.Debug.skipLoads) {
+                this.conductor.start(0.5);
+            } else {
+                console.log('Skipping conductor.start because skipLoads is enabled');
+            }
+        } catch (e) {
+            console.warn('Conductor start failed:', e);
+        }
     }
 
     async loadImages(){
-        console.log(`Loading images...`)
+    // Loading images
         this.BackgroundImageLinks = {
             'ui1':'Assets/Backgrounds/Base UI 1.png',
             'ui2':'Assets/Backgrounds/Base UI 2.png',
@@ -98,18 +131,30 @@ export class TitleScene extends Scene {
         }
         for(let file in this.BackgroundImages){
             this.BackgroundImages[file].src = this.BackgroundImageLinks[file];
-            console.log(`Loaded image: ${file}`)
+            if (this._loadingOverlay) {
+                // rough incremental progress while images load
+                const idx = Object.keys(this.BackgroundImages).indexOf(file);
+                const total = Object.keys(this.BackgroundImages).length + Object.keys(this.SpriteImages).length;
+                const progress = Math.min(0.2, ((idx + 1) / total) * 0.2);
+                this._loadingOverlay.setProgress(progress);
+            }
         }
         for(let file in this.SpriteImages){
             this.SpriteImages[file].src = this.SpriteImageLinks[file];
-            console.log(`Loaded image: ${file}`)
+            if (this._loadingOverlay) {
+                const idx = Object.keys(this.SpriteImages).indexOf(file) + Object.keys(this.BackgroundImages).length;
+                const total = Object.keys(this.BackgroundImages).length + Object.keys(this.SpriteImages).length;
+                const progress = Math.min(0.25, ((idx + 1) / total) * 0.25);
+                this._loadingOverlay.setProgress(progress);
+            }
         }
-        console.log(`Finished loading images`)
+    // Images loaded
         this.loaded += 1;
+        this._loadingOverlay && this._loadingOverlay.setProgress(0.25);
     }
 
     async loadMusic(){
-        console.log(`Loading music...`)
+    // Loading music
         const musicFiles = [
             ['intro', "Assets/sounds/Dragons don't like tetris p1.wav"],
             ['part1', "Assets/sounds/Dragons don't like tetris p2.wav"],
@@ -120,9 +165,29 @@ export class TitleScene extends Scene {
             ['part5', "Assets/sounds/Dragons don't like tetris p7.wav"]
         ];
 
+        let musicSkipped = false;
         for (const [key, path] of musicFiles) {
+            // If the debug flag was toggled to skip during loading, stop further loads
+            if (window.Debug && typeof window.Debug.getFlag === 'function' && window.Debug.getFlag('skipLoads')) {
+                console.log('Skipping remaining music loads (user requested skip)');
+                musicSkipped = true;
+                break;
+            }
             await this.musician.loadSound(key, path);
-            console.log(`Loaded music section: ${key}`)
+            if (this._loadingOverlay) {
+                // progress between 50% and 90% during music load
+                const idx = musicFiles.findIndex(m => m[0] === key);
+                const progress = 0.5 + (idx + 1) / musicFiles.length * 0.4;
+                this._loadingOverlay.setProgress(progress);
+                this._loadingOverlay.setMessage(`Loading music: ${key}`);
+            }
+        }
+
+        if (musicSkipped) {
+            // Consider this load-step done and avoid running remaining setup
+            this.loaded += 1;
+            this._loadingOverlay && this._loadingOverlay.setMessage('Music skipped');
+            return;
         }
 
         this.conductor.setSections([
@@ -141,13 +206,13 @@ export class TitleScene extends Scene {
         ];
         conditions.forEach((cond, i) => this.conductor.setCondition(i + 1, cond));
 
-        // Start playback
-        console.log(`Finished loading music.`)
+    // Start playback
         this.loaded += 1;
+        this._loadingOverlay && this._loadingOverlay.setProgress(0.9);
     }
 
     async loadSounds(){
-        console.log(`Loading sound effects...`)
+    // Loading sound effects
         const sfx = [
             ['fireball', 'Assets/sounds/fireball_hit.wav'],
             ['crash', 'Assets/sounds/crash.wav'],
@@ -159,14 +224,25 @@ export class TitleScene extends Scene {
 
         for (const [key, path] of sfx) {
             await this.soundGuy.loadSound(key, path);
-            console.log(`Loaded sound: ${key}`)
+            if (this._loadingOverlay) {
+                const idx = sfx.findIndex(s => s[0] === key);
+                const progress = 0.25 + (idx + 1) / sfx.length * 0.25;
+                this._loadingOverlay.setProgress(progress);
+                this._loadingOverlay.setMessage(`Loading SFX: ${key}`);
+            }
         }
-        console.log(`Finished loading sound effects.`)
+    // Sound effects loaded
         this.loaded += 1;
+        this._loadingOverlay && this._loadingOverlay.setProgress(0.5);
     }
 
     async loadNarrator(){
-        console.log(`Firing narrator...`)
+    // Loading narrator 
+        if (window.Debug && typeof window.Debug.getFlag === 'function' && window.Debug.getFlag('skipLoads')) {
+            console.log('Skipping narrator loads due to skipLoads flag');
+            this.loaded += 1;
+            return;
+        }
         const narratorFiles = [
             ["WhatIsThis2", 'Assets/narrator/WhatIsThis2.wav'],
             ["WhatIsThis1", 'Assets/narrator/WhatIsThis1.wav'],
@@ -214,20 +290,54 @@ export class TitleScene extends Scene {
             ["why", 'Assets/narrator/why.wav']
         ];
 
+        let narratorSkipped = false;
         for (const [key, path] of narratorFiles) {
+            if (window.Debug && typeof window.Debug.getFlag === 'function' && window.Debug.getFlag('skipLoads')) {
+                console.log('Skipping remaining narrator loads (user requested skip)');
+                narratorSkipped = true;
+                break;
+            }
             await this.narrator.loadSound(key, path);
-            console.log(`Loaded Dialouge: ${key}`)
+        }
+        if (narratorSkipped) {
+            this.loaded += 1;
+            this._loadingOverlay && this._loadingOverlay.setMessage('Narrator skipped');
+            return;
         }
         this.loaded += 1;
-        console.log(`Finished loading narrator`)
+        this._loadingOverlay && this._loadingOverlay.setProgress(1);
+    // Narrator loaded
     }
 
-    onSwitchFrom(resources){
-        if (resources && resources.volume) {
-            this.settings = resources;
-        } else {
-            this.settings = structuredClone(this.defaultSaveData.settings);
+    onSwitchFrom(resources) {
+        if (!resources) {
+            console.error('No resources...');
+            return;
         }
+
+        if (!(resources instanceof Map)) {
+            console.error('Invalid resources type');
+            return;
+        }
+
+        for (const [key, value] of resources.entries()) {
+            let log = true;
+            switch (key) {
+                case 'settings': this.settings = value; break;
+                case 'backgrounds': this.BackgroundImages = value; break;
+                case 'sprites': this.SpriteImages = value; break;
+                case 'soundguy': this.soundGuy = value; break;
+                case 'musician': break;
+                case 'conductor': this.conductor = value; break;
+                case 'narrator': this.narrator = value; break;
+                case 'dragon': this.dragon = value; break;
+                case 'settings-button': this.elements.set('settings-button', value); break;
+                case 'pause': this.elements.set('pause', value); break;
+                default: console.warn(`Unknown resource key: ${key}`); log = false;
+            }
+            if (log) console.log(`Loaded: ${key}`);
+        }
+        this.conductor.reset();
     }
 
     onSwitchTo(){
@@ -242,6 +352,7 @@ export class TitleScene extends Scene {
         resources.set('conductor',this.conductor)
         resources.set('narrator',this.narrator)
         resources.set('pause',this.pauseMenu)
+        resources.set('dragon',this.dragon)
         resources.set('settings-button',this.elements.get('settings-button'))
         return resources; 
     }
@@ -251,6 +362,10 @@ export class TitleScene extends Scene {
         this.createUI()
         this.dragon = new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(690,75),this.SpriteImages)
         this.dragon.vlos = new Vector(0.0001,0);
+        // Hide loading overlay now
+        try {
+            this._loadingOverlay && this._loadingOverlay.hide();
+        } catch (e) { /* ignore */ }
     }
 
     createUI(){
@@ -262,9 +377,9 @@ export class TitleScene extends Scene {
             this.conductor.setVolume(this.settings.volume.music,3)
             await this.narrator.playSequence(['WhatIsThis1','This isnt dungions & dragons 2'],this.settings.volume.narrator); 
         })
-
+        
         modifierButton.onPressed.left.connect(()=>{
-            this.scene = 'modifiers'; 
+            this.switchScene('modifier')
         })
         this.elements.set('startButton',startButton)
         this.elements.set('modifierButton',modifierButton)
@@ -391,6 +506,42 @@ export class TitleScene extends Scene {
             if (collision) {
                 this.dragon.pos = collision.pos;
                 this.dragon.vlos = collision.vlos;
+            }
+        }
+
+        // --- Fireball -> UIButton interaction (same logic as modifier scene) ---
+        if (this.dragon && this.dragon.fireballs && this.dragon.fireballs.length > 0) {
+            const fires = this.dragon.fireballs.slice();
+            // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
+            // but include any child buttons the pause container may hold, and only if visible.
+            const buttons = [];
+            for (const [key, el] of this.elements.entries()) {
+                if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
+            }
+
+            for (let fire of fires) {
+                for (let btn of buttons) {
+                    if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
+                        try {
+                            btn.onPressed.left.emit();
+                        } catch (e) {
+                            if (btn.trigger) {
+                                btn.triggered = !btn.triggered;
+                                btn.onTrigger.emit(btn.triggered);
+                            }
+                        }
+                        // Destroy the fireball so it can't trigger multiple buttons
+                        try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
+
+                        // Provide a quick visual feedback: pulse the baseColor
+                        if (btn.baseColor) {
+                            const orig = btn.baseColor;
+                            btn.baseColor = '#FFFFFF44';
+                            setTimeout(() => { btn.baseColor = orig; }, 120);
+                        }
+                        break;
+                    }
+                }
             }
         }
         

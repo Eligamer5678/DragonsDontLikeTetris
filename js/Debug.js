@@ -85,6 +85,8 @@ class Debug {
 
         // Keyword signals map
         this.signals = new Map();
+    // Generic flags map (used by other systems to toggle quick behaviors)
+    this.flags = new Map();
 
         // Ensure wheel events on the input are handled (whether the input pre-existed or was just created).
         this.logs = [];
@@ -152,6 +154,51 @@ class Debug {
             return;
         }
         this.signals.delete(keyword.toLowerCase());
+    }
+
+    /**
+     * Add or set a named flag. Flags are stored case-insensitively.
+     * @param {string} name
+     * @param {*} value
+     */
+    addFlag(name, value = true) {
+        if (typeof name !== 'string') {
+            this.warn('addFlag expects a string name');
+            return;
+        }
+        this.flags.set(name.toLowerCase(), value);
+        this.log(`[Debug] Flag set: ${name} = ${String(value)}`);
+    }
+
+    /**
+     * Remove a named flag.
+     * @param {string} name
+     */
+    removeFlag(name) {
+        if (typeof name !== 'string') {
+            this.warn('removeFlag expects a string name');
+            return;
+        }
+        this.flags.delete(name.toLowerCase());
+        this.log(`[Debug] Flag removed: ${name}`);
+    }
+
+    /**
+     * Retrieve a flag value (case-insensitive). Returns undefined if not set.
+     * @param {string} name
+     */
+    getFlag(name) {
+        if (typeof name !== 'string') return undefined;
+        return this.flags.get(name.toLowerCase());
+    }
+
+    /**
+     * Check whether a flag is present (case-insensitive).
+     * @param {string} name
+     */
+    hasFlag(name) {
+        if (typeof name !== 'string') return false;
+        return this.flags.has(name.toLowerCase());
     }
     try() {
         if (!this.visible) return;

@@ -73,11 +73,11 @@ export class GameScene extends Scene {
                 case 'musician': this.musician = value; break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
+                case 'dragon': this.dragon = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
-            if (log) console.log(`Loaded: ${key}`);
         }
 
         // Reconnect debug signals when switching into this scene
@@ -108,6 +108,13 @@ export class GameScene extends Scene {
             this.SPEED = false;
         });
         window.Debug.createSignal('healthy',()=>{this.dragon.lockHp = !this.dragon.lockHp;});
+        const conditions = [
+            () => this.dragon.power > 1,
+            () => this.dragon.power > 2,
+            () => this.dragon.power > 3,
+            () => this.dragon.power > 5,
+        ];
+        conditions.forEach((cond, i) => this.conductor.setCondition(i + 1, cond));
     }
 
 
@@ -191,6 +198,7 @@ export class GameScene extends Scene {
             this.soundGuy.play('reset')
             this.resets+=1
             this.lineMessages.push('Stack overflow. Restarting...')
+            this.aiScore = 0;
         })
         
 
@@ -251,6 +259,7 @@ export class GameScene extends Scene {
             logMemory();
         });
         
+        
     }
 
     update(delta) {
@@ -305,6 +314,7 @@ export class GameScene extends Scene {
                 this.particles[i] = new Particle(this.Draw, pos, vel, size, color);
             }
         }
+        this.Board.dmgMult = 1 + this.aiScore/10000;
     }
 
     createUI(){
@@ -330,6 +340,7 @@ export class GameScene extends Scene {
             this.UIDraw.rect(new Vector(0,0),new Vector(708,1080),null,true,0,true);
             this.UIDraw.image(this.BackgroundImages['ui2'],Vector.zero(),new Vector(708,1080))
             this.UIDraw.text(`Score: ${Math.round(this.aiScore)}`,new Vector(80,300),"#999999ff",1,55,{'align':'start'})
+            this.UIDraw.text(`Increasing damage taken by: ${Math.round(this.aiScore/100)}%`,new Vector(120,330),"#791a1aff",1,25,{'align':'start','italics' :true})
             
             
             for(let l = 0; l<this.lineMessages.length; l++){
@@ -341,20 +352,20 @@ export class GameScene extends Scene {
             this.UIDraw.rect(new Vector(1223,0),new Vector(697,1080),null,true,0,true);
             this.UIDraw.image(this.BackgroundImages['ui1'],new Vector(1223,0),new Vector(697,1080))
             this.UIDraw.text(`Power: ${Math.round((this.dragon.power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
-            this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1280,290),"#960000ff",1,55,{'align':'start'})
-            this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1280,350),this.settings.colors.blocks,1,55,{'align':'start'})
-            this.UIDraw.text(`Resets: ${Math.round(this.resets)}`,new Vector(1280,410),"#FFFFFF55",1,55,{'align':'start'})
+            this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1290,290),"#ff0000ff",1,45,{'align':'start'})
+            this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1290,340),this.settings.colors.blocks,1,45,{'align':'start'})
+            this.UIDraw.text(`Board resets: ${Math.round(this.resets)}`,new Vector(1290,390),"#FFFFFF55",1,45,{'align':'start'})
         }
         this.UIDraw.rect(new Vector(135,78),new Vector(100*5.18,34),'#000000')
         this.UIDraw.rect(new Vector(153,135),new Vector(1*499,32),'#000000')
         this.UIDraw.rect(new Vector(135,78),new Vector(this.dragon.health*5.18,34),'#FF0000')
-        this.UIDraw.rect(new Vector(153,135),new Vector(this.dragon.anger*499,32),'rgba(62, 173, 31, 1)')
+        this.UIDraw.rect(new Vector(153,135),new Vector(Math.min(this.dragon.anger,1)*499,32),'rgba(62, 173, 31, 1)')
+        this.UIDraw.useCtx('overlays')
+        this.UIDraw.clear()
         let sortedElements = [...this.elements.values()].sort((a, b) => a.layer - b.layer);
         for (const elm of sortedElements) {
             elm.draw(this.UIDraw);
         }
-        this.UIDraw.useCtx('overlays')
-        this.UIDraw.clear()
         this.dragon.draw()
         this.UIDraw.useCtx('UI')
 

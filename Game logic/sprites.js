@@ -43,7 +43,7 @@ export class Dragon {
         this.power = 0.2
         this.big = false;
         this.heavy = false;
-        this.fireballTimer = 5
+        this.fireballTimer = 10
         this.lockHp = true;
         this.spin = 0;
         this.updraft = 0;
@@ -121,7 +121,7 @@ export class Dragon {
             }
             
         }
-        if(this.anger === 1 && this.keys.pressed('g')){
+        if(this.anger >= 1 && this.keys.pressed('g')){
             this.megaabilty.emit()
             this.anger = 0;
             this.spin = 2*Math.PI

@@ -5,6 +5,12 @@ export default class Mouse {
         this.rect = rect;
         this.scale = scale;
         this.pos = new Vector();
+    // Tap detection variables
+    this._tapStart = 0;
+    this._tapStartX = 0;
+    this._tapStartY = 0;
+    this._TAP_THRESHOLD = 200; // ms
+    this._MOVE_THRESHOLD = 10; // px
         this.prevPos = new Vector();
         this.grabPos = null;
         this.scrollDelta = 0;
@@ -31,6 +37,23 @@ export default class Mouse {
         window.addEventListener("wheel", e => {
             this.scrollDelta += e.deltaY;
         }, { passive: true });
+        window.addEventListener("touchstart", e => {
+            const touch = e.changedTouches[0];
+            this._tapStart = e.timeStamp;
+            this._tapStartX = touch.clientX;
+            this._tapStartY = touch.clientY;
+        });
+        window.addEventListener("touchend", e => {
+            const touch = e.changedTouches[0];
+            const tapDuration = e.timeStamp - this._tapStart;
+            const moveX = Math.abs(touch.clientX - this._tapStartX);
+            const moveY = Math.abs(touch.clientY - this._tapStartY);
+            if (tapDuration < this._TAP_THRESHOLD && moveX < this._MOVE_THRESHOLD && moveY < this._MOVE_THRESHOLD) {
+                // Recognized as a tap
+                this._setButton(0, 1);
+                setTimeout(() => this._setButton(0, 0), 10); // Release after short delay
+            }
+        });
     }
 
     _onMove(e) {
@@ -68,7 +91,8 @@ export default class Mouse {
     }
 
     _setButton(code, val) {
-        if (code === 0) this.buttons.left.state = val;
+        // Chromebook/Touch: treat button -1 or undefined as left click
+        if (code === 0 || code === -1 || code === undefined) this.buttons.left.state = val;
         if (code === 1) this.buttons.middle.state = val;
         if (code === 2) this.buttons.right.state = val;
     }
