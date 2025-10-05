@@ -265,21 +265,27 @@ export class modifierScene extends Scene {
         const mod6 = new UIButton(this.mouse, this.keys, new Vector(1288, 661), new Vector(531, 329), 1, null, '#FF000000', '#FFFFFF33', '#00000055');
         mod1.onTrigger.connect((state) => {
             mod1.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier1', state);
         });
         mod2.onTrigger.connect((state) => {
             mod2.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier2', state);
         });
         mod3.onTrigger.connect((state) => {
             mod3.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier3', state);   
         });
         mod4.onTrigger.connect((state) => {
             mod4.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier4', state);
         });
         mod5.onTrigger.connect((state) => {
             mod5.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier5', state);
         });
         mod6.onTrigger.connect((state) => {
             mod6.baseColor = state ? '#FF006600' : '#FF000000';
+            this.saver.set('modifiers/modifier6', state);
         });
         mod1.trigger = true;
         mod2.trigger = true;

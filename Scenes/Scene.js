@@ -5,7 +5,7 @@ export default class Scene {
         this.isPreloaded = false;
         this.Draw = Draw;
         this.UIDraw = UIDraw;
-        this.Saver = saver;
+        this.saver = saver;
         this.mouse = mouse;
         this.keys = keys;
         this.switchScene = switchScene;

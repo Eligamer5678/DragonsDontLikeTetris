@@ -115,6 +115,51 @@ export class GameScene extends Scene {
             () => this.dragon.power > 5,
         ];
         conditions.forEach((cond, i) => this.conductor.setCondition(i + 1, cond));
+
+
+        if(this.saver.get('modifiers/modifier1', false)===true){
+            this.dragon.fireballTimer = 10;
+        }else{
+            this.dragon.fireballTimer = 6;
+        }
+        if(this.saver.get('modifiers/modifier2', false)===true){
+            this.dragon.big = true;
+            console.log("big dragon enabled");
+        }else{
+            this.dragon.big = false;
+        }
+        if(this.saver.get('modifiers/modifier4', false)===true){
+            this.dragon.heavy = true;
+        }else{
+            this.dragon.heavy = false;
+        }
+        
+        if(this.saver.get('modifiers/modifier6', false)===true){
+            if (this.fallTimer && this.AITimer) {
+                this.fallTimer.endTime = 0.01;
+                this.AITimer.endTime = 0.01;
+                if(this.SPEED === false){
+                    this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
+                    this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
+                    this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
+                    this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
+                    this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
+                    this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
+                }
+                this.SPEED = true;
+            }
+        }else{
+            if(this.SPEED === true && this.fallTimer && this.AITimer){
+                this.fallTimer.onLoop.disconnect('fall1');
+                this.fallTimer.onLoop.disconnect('fall2');
+                this.fallTimer.onLoop.disconnect('fall3');
+                this.AITimer.onLoop.disconnect('ai1');
+                this.AITimer.onLoop.disconnect('ai2');
+                this.AITimer.onLoop.disconnect('ai3');
+            }
+            this.SPEED = false;
+        }
+
     }
 
 
@@ -129,13 +174,36 @@ export class GameScene extends Scene {
         this.glitchTimer.start();
         
         this.fallTimer = new Timer('loop', 0.2);
-
+        
         this.sessionTimer = new Timer('stopwatch');
         this.fallTimer.onLoop.connect(() => this.Board.moveTetromino('fall'));
         this.AITimer.start();
         this.sessionTimer.start();
         this.fallTimer.start();
         this.frameCount = 0;
+        if(this.saver.get('modifiers/modifier6', false)===true){
+            this.fallTimer.endTime = 0.01;
+            this.AITimer.endTime = 0.01;
+            if(this.SPEED === false){
+                this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
+                this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
+            }
+            this.SPEED = true;
+        }else{
+            if(this.SPEED === true){
+                this.fallTimer.onLoop.disconnect('fall1');
+                this.fallTimer.onLoop.disconnect('fall2');
+                this.fallTimer.onLoop.disconnect('fall3');
+                this.AITimer.onLoop.disconnect('ai1');
+                this.AITimer.onLoop.disconnect('ai2');
+                this.AITimer.onLoop.disconnect('ai3');
+            }
+            this.SPEED = false;
+        }
         // Particle system: spawn particles over time
         this.particles = [];
         this.particleTimer = new Timer('loop', 0.05);
@@ -173,6 +241,11 @@ export class GameScene extends Scene {
             this.sessionBlocks = 0;
             
         })
+
+
+
+
+
         this.Board.onLineclear.connect((lines)=>{
             this.soundGuy.play('lineclear');
             switch (lines) {
@@ -220,12 +293,12 @@ export class GameScene extends Scene {
             this.fallTimer.endTime = 0.01;
             this.AITimer.endTime = 0.01;
             if(this.SPEED === false){
-            this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
-            this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
-            this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
-            this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
-            this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
-            this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
+                this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
+                this.fallTimer.onLoop.connect('fall3', () => this.Board.moveTetromino('fall'));
+                this.AITimer.onLoop.connect('ai1', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai2', () => this.Board.updateAI());
+                this.AITimer.onLoop.connect('ai3', () => this.Board.updateAI());
             }
             this.SPEED = true;
         });
@@ -273,6 +346,16 @@ export class GameScene extends Scene {
         this.particleTimer.update(delta);
         this.glitchTimer.update(delta);
         this.frameCount += 1;
+        if(this.saver.get('modifiers/modifier3', false)){
+            this.sessionTimer.update(delta);
+            this.sessionTimer.update(delta);
+        }
+        if(this.saver.get('modifiers/modifier5', false)){
+            this.dragon.health += this.dragon.power*delta/10;
+            if(this.dragon.health > this.dragon.power*10){
+                this.dragon.health = this.dragon.power*10
+            }
+        }
         if(this.sessionTimer.getTime()>300){
             this.glitchTimer.endTime = 1/((this.sessionTimer.getTime()-299)/15)
         }
