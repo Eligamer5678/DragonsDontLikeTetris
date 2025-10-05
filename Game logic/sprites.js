@@ -43,7 +43,7 @@ export class Dragon {
         this.power = 0.2
         this.big = false;
         this.heavy = false;
-        this.fireballTimer = 10
+        this.fireballTimer = 6
         this.lockHp = true;
         this.spin = 0;
         this.updraft = 0;

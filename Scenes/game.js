@@ -168,6 +168,9 @@ export class GameScene extends Scene {
             this.dragon.reset(new Vector(1920/2,1080/2));
             this.Board.reset();
             this.lineMessages.push('HAHAHAHA!!!!!!!!!!!')
+            this.sessionTimer.reset();
+            this.aiScore = 0;
+            this.sessionBlocks = 0;
             
         })
         this.Board.onLineclear.connect((lines)=>{
@@ -374,4 +377,4 @@ export class GameScene extends Scene {
     }
 
     
-}
+} 
