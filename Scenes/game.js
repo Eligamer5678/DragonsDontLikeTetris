@@ -82,6 +82,7 @@ export class GameScene extends Scene {
 
         // Reconnect debug signals when switching into this scene
         window.Debug.createSignal('setPower',(e)=>{this.dragon.power = e;});
+        window.Debug.createSignal('setAnger',(e)=>{this.dragon.anger = e;});
         window.Debug.createSignal('killDragon',()=>{this.dragon.health = 0;});
         window.Debug.createSignal('fast',()=>{
             this.fallTimer.endTime = 0.01;
@@ -159,6 +160,7 @@ export class GameScene extends Scene {
             }
             this.SPEED = false;
         }
+        this.soundsPlayed = 0;
 
     }
 
@@ -338,6 +340,26 @@ export class GameScene extends Scene {
         
     }
 
+
+    narratorSounds(){
+        // List of narrator sound actions in order, each returns true if played
+        const soundActions = [
+            () => { if(this.sessionBlocks>25) { this.narrator.play('Stop destroying the blocks 1',this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.sessionBlocks>50) { this.narrator.play('Stop destroying the blocks 2',this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.sessionBlocks>75) { this.narrator.play('Stop destroying the blocks 3',this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.dragon.power>=0.5) { this.narrator.playSequence(['bigger fireballs 2','thats great 3'],this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.dragon.power>=1) { this.narrator.playSequence(['Are you getting stronger'],this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.dragon.power>=4) { this.narrator.playSequence(['dragon left'],this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.dragon.power>=5) { this.narrator.playSequence(['dont crash my pc'],this.saver.get('settings/volume/narrator',1)); return true; } return false; },
+            () => { if(this.sessionBlocks>150) { this.narrator.playSequence(['Stop destroying the blocks 2','success'],this.saver.get('settings/volume/narrator',1)); return true; } return false; }
+        ];
+        // Only play the next sound if it hasn't been played yet
+        if (this.soundsPlayed < soundActions.length) {
+            if (soundActions[this.soundsPlayed]()) {
+                this.soundsPlayed++;
+            }
+        }
+    }
     update(delta) {
         if(!this.isReady) return;
         this.AITimer.update(delta);
@@ -346,6 +368,7 @@ export class GameScene extends Scene {
         this.particleTimer.update(delta);
         this.glitchTimer.update(delta);
         this.frameCount += 1;
+        this.narratorSounds();
         if(this.saver.get('modifiers/modifier3', false)){
             this.sessionTimer.update(delta);
             this.sessionTimer.update(delta);
@@ -437,6 +460,12 @@ export class GameScene extends Scene {
         if(!((this.frameCount-20)%20)){
             this.UIDraw.rect(new Vector(1223,0),new Vector(697,1080),null,true,0,true);
             this.UIDraw.image(this.BackgroundImages['ui1'],new Vector(1223,0),new Vector(697,1080))
+            this.UIDraw.rect(new Vector(1261,62),new Vector((this.dragon.power % 1)*436,117),'#ff000033')
+            if((this.dragon.power % 1)*436 > 4.5){
+                this.UIDraw.rect(new Vector(1265,179),new Vector(Math.min((this.dragon.power % 1)*436-4.5,427),6),'#ff000033') //diff 9
+                this.UIDraw.rect(new Vector(1265,56),new Vector(Math.min((this.dragon.power % 1)*436-4.5,427),6),'#ff000033')
+            }
+
             this.UIDraw.text(`Power: ${Math.round((this.dragon.power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
             this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1290,290),"#ff0000ff",1,45,{'align':'start'})
             this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1290,340),this.settings.colors.blocks,1,45,{'align':'start'})

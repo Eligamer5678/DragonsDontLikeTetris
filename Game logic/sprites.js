@@ -46,6 +46,7 @@ export class Dragon {
         this.fireballTimer = 6
         this.lockHp = true;
         this.spin = 0;
+        this.spinHeal = false;
         this.updraft = 0;
         this.vlos = new Vector(0,0);
         this.rot = 0;
@@ -121,22 +122,50 @@ export class Dragon {
             }
             
         }
+        if(this.anger >= 1 && this.keys.pressed('f')){
+            this.megaabilty.emit()
+            this.anger = 0;
+            this.spin = 2*Math.PI
+            this.spinHeal = 0;
+            this.power += 0.15;
+        }
+        if(this.anger >= 1 && this.keys.pressed('h')){
+            this.megaabilty.emit()
+            this.anger = 0;
+            this.spin = 2*Math.PI
+            this.spinHeal = 1;
+        }
         if(this.anger >= 1 && this.keys.pressed('g')){
             this.megaabilty.emit()
             this.anger = 0;
             this.spin = 2*Math.PI
-            this.health+=10
+            this.spinHeal = 2;
         }
         if(this.spin>0){
-            this.spin-=Math.PI/6;
+            this.spin-=Math.PI * 2 * delta;
             if(this.spin<0){
                 this.spin = 0;
             }
-            let fire = new FireBall(this,this.images['mega-fireball'],this.Draw,this.pos.add(this.size.mult(0.5)),this.spin,500,this.power*10,true)
-            fire.destroy.connect(() => {
-                this.fireballs = this.fireballs.filter(item => item !== fire);
-            })
-            this.fireballs.push(fire)
+            if(this.spinHeal===1){
+                this.health+=delta * 50;
+            }
+            if(this.spinHeal===0){
+                this.spin-=Math.PI * 2 * delta*2;
+                let fire = new FireBall(this,this.images['mega-fireball'],this.Draw,this.pos.add(this.size.mult(0.5)),this.spin,500,this.power*10,true)
+                fire.destroy.connect(() => {
+                    this.fireballs = this.fireballs.filter(item => item !== fire);
+                })
+                this.fireballs.push(fire)
+            }
+            if(this.spinHeal===2){
+                this.health+=delta * 100;
+                this.spin-=Math.PI * 2 * delta*4;
+                let fire = new FireBall(this,this.images['fireball'],this.Draw,this.pos.add(this.size.mult(0.5)),this.spin,500,this.power*3,true)
+                fire.destroy.connect(() => {
+                    this.fireballs = this.fireballs.filter(item => item !== fire);
+                })
+                this.fireballs.push(fire)
+            }
         }
         if(this.power>2){
             this.health+=this.power*delta
