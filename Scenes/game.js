@@ -5,6 +5,7 @@ import Board from '../Game logic/board.js';
 import { Dragon,Appicon,FireBall,Fragment } from '../Game logic/sprites.js';
 import Timer from '../js/Timer.js';
 import { Particle } from '../Game logic/Particle.js';
+import { TitleScene } from './title.js';
 
 
 export class GameScene extends Scene {
@@ -19,6 +20,7 @@ export class GameScene extends Scene {
     }
     resetGame(){
         this.dragons.forEach((dragon)=>{
+            dragon.died = false;
             dragon.reset(new Vector(1920/2,1080/2));
         })
         this.Board.reset();
@@ -258,7 +260,6 @@ export class GameScene extends Scene {
             this.soundGuy.play('reset')
             this.resets+=1
             this.lineMessages.push('Stack overflow. Restarting...')
-            this.aiScore = 0;
         })
         this.Board.onRotate.connect(()=>this.soundGuy.play('rotate'))
         this.Board.blockBroken.connect(()=>{this.soundGuy.play('break');this.sessionBlocks+=1;})
@@ -361,6 +362,9 @@ export class GameScene extends Scene {
         if(this.sessionTimer.getTime()>300){
             this.glitchTimer.endTime = 1/((this.sessionTimer.getTime()-299)/15)
         }
+        else if(this.saver.get('twoPlayer',false) && this.sessionTimer.getTime()>200){
+            this.glitchTimer.endTime = 1/((this.sessionTimer.getTime()-200)/15)
+        }
         else{
             this.glitchTimer.time = 0;
         }
@@ -443,10 +447,7 @@ export class GameScene extends Scene {
             }
         
         })
-        if(allDead) {this.dragons.forEach((dragon) => {
-            dragon.died = false;
-            dragon.reset(new Vector(1920/2,1080/2));
-        })}
+        if(allDead) this.resetGame()
         this.updateParticles(delta)
         
         this.Board.dmgMult = 1 + this.aiScore/10000;

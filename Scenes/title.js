@@ -597,6 +597,7 @@ export class TitleScene extends Scene {
             dragon.update(delta);
             for (let elm of sortedElements) {
                 elm.update(delta);
+
                 let collision = Geometry.spriteToTile(dragon.pos.clone(), dragon.vlos.clone(), dragon.size, elm.pos, elm.size);
                 if (collision) {
                     dragon.pos = collision.pos;
@@ -629,12 +630,12 @@ export class TitleScene extends Scene {
                         let fireCollision = Geometry.spriteToTile(
                             fire.pos.clone(),
                             fire.vlos ? fire.vlos.clone() : new Vector(0,0),
-                            new Vector(fire.size.x,0),
+                            new Vector(fire.size.x,0.1),
                             new Vector(block.pos.x, block.pos.y),
                             new Vector(block.size.x, block.size.y)
                         );
                         if (fireCollision) {
-                            block.hp -= 0.5;
+                            block.hp -= 2;
                             if (block.hp <= 0) {
                                 block.destroyed = true;
                             }
@@ -659,42 +660,44 @@ export class TitleScene extends Scene {
             this.dragons[1].image = this.SpriteImages['blue-dragon'];
         }
         // ui + fireball collision
-        this.dragons.forEach((dragon)=>{
-            if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
-                const fires = dragon.fireballs.slice();
-                // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
-                // but include any child buttons the pause container may hold, and only if visible.
-                const buttons = [];
-                for (const [key, el] of this.elements.entries()) {
-                    if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
-                }
-                
-                for (let fire of fires) {
-                    for (let btn of buttons) {
-                        if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
-                            try {
-                                btn.onPressed.left.emit();
-                            } catch (e) {
-                                if (btn.trigger) {
-                                    btn.triggered = !btn.triggered;
-                                    btn.onTrigger.emit(btn.triggered);
+        if(!this.saver.get('twoPlayer',false)){
+            this.dragons.forEach((dragon)=>{
+                if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
+                    const fires = dragon.fireballs.slice();
+                    // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
+                    // but include any child buttons the pause container may hold, and only if visible.
+                    const buttons = [];
+                    for (const [key, el] of this.elements.entries()) {
+                        if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
+                    }
+                    
+                    for (let fire of fires) {
+                        for (let btn of buttons) {
+                            if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
+                                try {
+                                    btn.onPressed.left.emit();
+                                } catch (e) {
+                                    if (btn.trigger) {
+                                        btn.triggered = !btn.triggered;
+                                        btn.onTrigger.emit(btn.triggered);
+                                    }
                                 }
+                                // Destroy the fireball so it can't trigger multiple buttons
+                                try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
+                                
+                                // Provide a quick visual feedback: pulse the baseColor
+                                if (btn.baseColor) {
+                                    const orig = btn.baseColor;
+                                    btn.baseColor = '#FFFFFF44';
+                                    setTimeout(() => { btn.baseColor = orig; }, 120);
+                                }
+                                break;
                             }
-                            // Destroy the fireball so it can't trigger multiple buttons
-                            try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
-                            
-                            // Provide a quick visual feedback: pulse the baseColor
-                            if (btn.baseColor) {
-                                const orig = btn.baseColor;
-                                btn.baseColor = '#FFFFFF44';
-                                setTimeout(() => { btn.baseColor = orig; }, 120);
-                            }
-                            break;
                         }
                     }
                 }
-            }
-        })
+            })
+        }
         
         this.updateRectTool();
     }
