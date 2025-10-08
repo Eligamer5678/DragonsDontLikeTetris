@@ -51,7 +51,7 @@ export class modifierScene extends Scene {
                 case 'narrator': this.narrator = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
-                case 'dragon': this.dragon = value; break;
+                case 'dragons': this.dragons = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
@@ -80,180 +80,72 @@ export class modifierScene extends Scene {
         if(this.loaded===4){
             this.loaded+=1;
         }
-        this.dragon.update(delta);
         this.mouse.setMask(0);
         this.mouse.setPower(0);
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
         for (let elm of sortedElements){
             elm.update(delta);
-            let collision = Geometry.spriteToTile(this.dragon.pos.clone(), this.dragon.vlos.clone(), this.dragon.size, elm.pos, elm.size);
-            if (collision) {
-                this.dragon.pos = collision.pos;
-                this.dragon.vlos = collision.vlos;
-            }
+            this.dragons.forEach((dragon)=>{
+                let collision = Geometry.spriteToTile(dragon.pos.clone(), dragon.vlos.clone(), dragon.size, elm.pos, elm.size);
+                if (collision) {
+                    dragon.pos = collision.pos;
+                    dragon.vlos = collision.vlos;
+                }
+            })
         }
+        this.dragons.forEach((dragon)=>{
+            dragon.update(delta);
 
-        // --- Fireball -> UIButton interaction ---
-        // If the dragon exists and has fireballs, check each fireball against each UIButton
-        if(this.deleteFireballs){
-            this.dragon.fireballs = [];
-        }
-        if (this.dragon && this.dragon.fireballs.length > 0) {
-            // Copy arrays to avoid mutation while iterating
-            const fires = this.dragon.fireballs.slice();
-            // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
-            // but include any child buttons the pause container may hold.
-            const buttons = [];
-            for (const [key, el] of this.elements.entries()) {
-                if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
+            // --- Fireball -> UIButton interaction ---
+            // If the dragon exists and has fireballs, check each fireball against each UIButton
+            if(this.deleteFireballs){
+                dragon.fireballs = [];
             }
+            if (dragon && dragon.fireballs.length > 0) {
+                // Copy arrays to avoid mutation while iterating
+                const fires = dragon.fireballs.slice();
+                // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
+                // but include any child buttons the pause container may hold.
+                const buttons = [];
+                for (const [key, el] of this.elements.entries()) {
+                    if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
+                }
 
-            for (let fire of fires) {
-                for (let btn of buttons) {
-                    // btn.pos and btn.size exist on UIButton
-                    if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
-                        try {
-                            // Emit a left-press on the button so toggle behavior runs
-                            btn.onPressed.left.emit();
-                        } catch (e) {
-                            // Fallback: toggle trigger state
-                            if (btn.trigger) {
-                                btn.triggered = !btn.triggered;
-                                btn.onTrigger.emit(btn.triggered);
+                for (let fire of fires) {
+                    for (let btn of buttons) {
+                        // btn.pos and btn.size exist on UIButton
+                        if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
+                            try {
+                                // Emit a left-press on the button so toggle behavior runs
+                                btn.onPressed.left.emit();
+                            } catch (e) {
+                                // Fallback: toggle trigger state
+                                if (btn.trigger) {
+                                    btn.triggered = !btn.triggered;
+                                    btn.onTrigger.emit(btn.triggered);
+                                }
                             }
+                            this.deleteFireballs = true;
+                            
+                            // Destroy the fireball so it can't trigger multiple buttons
+                            try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
+
+                            // Provide a quick visual feedback: pulse the baseColor
+                            if (btn.baseColor) {
+                                const orig = btn.baseColor;
+                                btn.baseColor = '#FFFFFF44';
+                                // restore after a short timeout using a minimal timer approach
+                                setTimeout(() => { btn.baseColor = orig; }, 120);
+                            }
+
+                            // Break to next fireball after a hit
+                            break;
                         }
-                        this.deleteFireballs = true;
-                        
-                        // Destroy the fireball so it can't trigger multiple buttons
-                        try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
-
-                        // Provide a quick visual feedback: pulse the baseColor
-                        if (btn.baseColor) {
-                            const orig = btn.baseColor;
-                            btn.baseColor = '#FFFFFF44';
-                            // restore after a short timeout using a minimal timer approach
-                            setTimeout(() => { btn.baseColor = orig; }, 120);
-                        }
-
-                        // Break to next fireball after a hit
-                        break;
                     }
                 }
             }
-        }
+        })
 
-        // === Rect Placement Tool (advanced) ===
-        if (!this._rectTool) {
-            this._rectTool = {
-                active: false,
-                start: null,
-                end: null,
-                dragging: false,
-                rects: [], // array of [x1, y1, x2, y2]
-                preview: null,
-                selected: null,
-                moving: false,
-                moveStart: null
-            };
-        }
-        // Activate tool on pressing ']'
-        if (this.keys.pressed(']')) {
-            this._rectTool.active = !this._rectTool.active;
-            if (this._rectTool.active) {
-                console.log('Rect tool activated. Click+drag, space to create, select, g to move, x to delete.');
-            } else {
-                this._rectTool.dragging = false;
-                this._rectTool.start = null;
-                this._rectTool.end = null;
-                this._rectTool.preview = null;
-                this._rectTool.selected = null;
-                this._rectTool.moving = false;
-                this._rectTool.rects = [];
-                this.mouse.releaseGrab();
-                console.log('Rect tool deactivated.');
-            }
-        }
-        if (this._rectTool.active) {
-            // Start grab on left press (for preview)
-            if (this.mouse.pressed('left') && !this._rectTool.dragging && !this._rectTool.moving) {
-                this._rectTool.start = this.mouse.pos.clone();
-                this.mouse.grab(this._rectTool.start);
-                this._rectTool.dragging = true;
-                this._rectTool.preview = null;
-            }
-            // End grab on left release (for preview)
-            if (this._rectTool.dragging && this.mouse.released('left')) {
-                this._rectTool.end = this.mouse.pos.clone();
-                this.mouse.releaseGrab();
-                this._rectTool.dragging = false;
-                // Store preview
-                this._rectTool.preview = [
-                    Math.round(this._rectTool.start.x),
-                    Math.round(this._rectTool.start.y),
-                    Math.round(this._rectTool.end.x),
-                    Math.round(this._rectTool.end.y)
-                ];
-            }
-
-            // Create rect on space
-            if (this._rectTool.preview && this.keys.pressed(' ')) {
-                this._rectTool.rects.push([...this._rectTool.preview]);
-                console.log('Placed rect:', this._rectTool.preview);
-                this._rectTool.preview = null;
-            }
-
-            // Select rect by clicking inside
-            if (this.mouse.pressed('left') && !this._rectTool.dragging && !this._rectTool.moving) {
-                const m = this.mouse.pos;
-                let found = null;
-                for (let i = 0; i < this._rectTool.rects.length; ++i) {
-                    const r = this._rectTool.rects[i];
-                    const x1 = Math.min(r[0], r[2]), x2 = Math.max(r[0], r[2]);
-                    const y1 = Math.min(r[1], r[3]), y2 = Math.max(r[1], r[3]);
-                    if (m.x >= x1 && m.x <= x2 && m.y >= y1 && m.y <= y2) {
-                        found = i;
-                        break;
-                    }
-                }
-                this._rectTool.selected = found;
-            }
-
-            // Move selected rect with 'g' (using Mouse grab system)
-            if (this._rectTool.selected !== null) {
-                // Start move only when 'g' is pressed and not already moving
-                if (this.keys.pressed('g') && !this._rectTool.moving) {
-                    this._rectTool.moving = true;
-                    this.mouse.grab(this.mouse.pos.clone());
-                    console.log('Moving rect:');
-                }
-                // Move while 'g' is held
-                if (this._rectTool.moving && this.keys.held('g')) {
-                    const idx = this._rectTool.selected;
-                    if (idx !== null) {
-                        const rect = this._rectTool.rects[idx];
-                        const delta = this.mouse.getGrabDelta();
-                        rect[0] += Math.round(delta.x);
-                        rect[1] += Math.round(delta.y);
-                        rect[2] += Math.round(delta.x);
-                        rect[3] += Math.round(delta.y);
-                        this.mouse.grab(this.mouse.pos.clone());
-                        console.log('MOVE');
-                    }
-                }
-                // End move when 'g' is released
-                if (this._rectTool.moving && !this.keys.held('g')) {
-                    this._rectTool.moving = false;
-                    this.mouse.releaseGrab();
-                }
-            }
-
-            // Delete selected rect with 'x'
-            if (this._rectTool.selected !== null && this.keys.pressed('x')) {
-                this._rectTool.rects.splice(this._rectTool.selected, 1);
-                this._rectTool.selected = null;
-                this._rectTool.moving = false;
-            }
-        }
     }
 
     createUI(){
@@ -321,34 +213,9 @@ export class modifierScene extends Scene {
         this.UIDraw.useCtx('overlays');
         this.UIDraw.clear();
         // Draw preview rect (while dragging or after drag)
-        if (this._rectTool && this._rectTool.active) {
-            // Preview while dragging
-            if (this._rectTool.dragging && this._rectTool.start) {
-                const start = this._rectTool.start;
-                const end = this.mouse.pos;
-                const topLeft = new Vector(Math.min(start.x, end.x), Math.min(start.y, end.y));
-                const size = new Vector(Math.abs(end.x - start.x), Math.abs(end.y - start.y));
-                this.UIDraw.rect(topLeft, size, '#00FF00');
-            }
-            // Preview after drag
-            if (this._rectTool.preview) {
-                const r = this._rectTool.preview;
-                const topLeft = new Vector(Math.min(r[0], r[2]), Math.min(r[1], r[3]));
-                const size = new Vector(Math.abs(r[2] - r[0]), Math.abs(r[3] - r[1]));
-                this.UIDraw.rect(topLeft, size, '#00FF88');
-            }
-            // Draw all placed rects
-            for (let i = 0; i < this._rectTool.rects.length; ++i) {
-                const r = this._rectTool.rects[i];
-                const topLeft = new Vector(Math.min(r[0], r[2]), Math.min(r[1], r[3]));
-                const size = new Vector(Math.abs(r[2] - r[0]), Math.abs(r[3] - r[1]));
-                const color = (i === this._rectTool.selected) ? '#FF00FF' : '#00FF00';
-                this.UIDraw.rect(topLeft, size, color);
-            }
-        }
-        this.dragon.draw()
+        this.dragons.forEach((dragon)=>{
+            dragon.draw()
+        })
         this.UIDraw.useCtx('UI');
-
-        // Draw rect tool preview (while dragging)
     }
 }

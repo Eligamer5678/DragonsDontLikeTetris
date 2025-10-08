@@ -38,6 +38,7 @@ export class Dragon {
         this.image = images['dragon']
         this.speed = 200;
         this.twoPlayer = false;
+        this.which = 0;
         this.anger = 0;
         this.health = 100
         this.power = 0.2
@@ -52,11 +53,21 @@ export class Dragon {
         this.rot = 0;
         this.fireballs = []
         this.fireTime = 0;
+        this.died = false;
         this.megaabilty = new Signal()
         this.onDeath = new Signal()
     }
     update(delta){
+        if(this.health<0){
+            this.health = 0;
+        }
         this.size = new Vector(40*Math.max(Math.min(this.power,5),1),40*Math.max(Math.min(this.power,5),1))
+        for(let i = this.fireballs.length-1; i>0; i--){
+            this.fireballs[i].update(delta);
+        }
+        if(this.died){
+            return;
+        }
         if(this.big){
             this.size = new Vector(40*Math.max(Math.min(this.power,5),1),40*Math.max(Math.min(this.power,5),1)).mult(2)
         }
@@ -80,26 +91,26 @@ export class Dragon {
             this.pos.x = 0;
             this.vlos.x *=-0.3
         }
-        if(this.keys.held('ArrowRight')||(this.keys.held('d')||this.keys.held('D'))&&!this.twoPlayer){
+        if(this.keys.held('ArrowRight')&&(this.which===0||!this.twoPlayer)||(this.keys.held('d')||this.keys.held('D'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.x+=2*Math.max(Math.min(this.power,5),1)
         }
-        if(this.keys.held('ArrowLeft')||(this.keys.held('a')||this.keys.held('A'))&&!this.twoPlayer){
+        if(this.keys.held('ArrowLeft')&&(this.which===0||!this.twoPlayer)||(this.keys.held('a')||this.keys.held('A'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.x-=2*Math.max(Math.min(this.power,5),1)
         }
-        if(this.keys.pressed('ArrowUp')||(this.keys.pressed('w')||this.keys.pressed('W'))&&!this.twoPlayer){
+        if(this.keys.pressed('ArrowUp')&&(this.which===0||!this.twoPlayer)||(this.keys.pressed('w')||this.keys.pressed('W'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.y = -6 *Math.max(Math.min(this.power,5),1) - Math.abs(Math.min(Math.max(this.vlos.y,10),20))/10 *Math.max(Math.min(this.power,5),1)
-        }else if(this.keys.held('ArrowUp',true)>0.2||(this.keys.held('w',true)>0.2||this.keys.held('W',true)>0.2)&&!this.twoPlayer){
+        }else if(this.keys.held('ArrowUp',true)>0.2&&(this.which===0||!this.twoPlayer)||(this.keys.held('w',true)>0.2||this.keys.held('W',true)>0.2)&&(!this.twoPlayer||this.which===1)){
             this.vlos.y = -6*Math.max(Math.min(this.power,5),1)
         }
-        if(this.keys.held('ArrowDown')||(this.keys.held('s')||this.keys.held('S'))&&!this.twoPlayer){
+        if(this.keys.held('ArrowDown')&&(this.which===0||!this.twoPlayer)||(this.keys.held('s')||this.keys.held('S'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.y = Math.abs(this.vlos.y)+20*delta * 1.2
         }
-        if(this.keys.held(" ",true)){
+        if(this.keys.held(" ",true)||this.twoPlayer){
             this.fireTime+=1;
         }else{
             this.fireTime = 0;
         }
-        if(this.fireTime%this.fireballTimer===1 && this.keys.held(" ")){
+        if(this.fireTime%this.fireballTimer===1 && (this.keys.held(" ")||this.twoPlayer)){
             let fire = new FireBall(this,this.images['fireball'],this.Draw,this.pos.add(this.size.mult(0.5)),Math.PI * Math.round(((Math.sign(-this.vlos.x)+1))/2),500,this.power)
             fire.destroy.connect(() => {
                 this.fireballs = this.fireballs.filter(item => item !== fire);
@@ -121,6 +132,36 @@ export class Dragon {
 
             }
             
+        }
+        this.useAbility(delta); 
+        if(this.power>2){
+            this.health+=this.power*delta
+        }
+        if(this.health>100&&this.lockHp){
+            this.health = 100;
+        }
+        if(this.health>320&&!this.lockHp){
+            this.health = 320;
+        }
+        this.vlos.x *= 0.8
+        
+        if(this.heavy){
+            this.vlos.x *= 0.8;
+            this.vlos.y += 3;
+        }
+        if(this.health<=0){
+            this.died = true;
+            this.onDeath.emit()
+            
+        }
+        
+    }
+    useAbility(delta){
+        if(this.twoPlayer){
+            if(this.anger>=1&&this.keys.pressed(' ')){
+                this.megaabilty.emit();
+            }
+            return;
         }
         if(this.anger >= 1 && this.keys.pressed('f')){
             this.megaabilty.emit()
@@ -167,31 +208,12 @@ export class Dragon {
                 this.fireballs.push(fire)
             }
         }
-        if(this.power>2){
-            this.health+=this.power*delta
-        }
-        if(this.health>100&&this.lockHp){
-            this.health = 100;
-        }
-        if(this.health>320&&!this.lockHp){
-            this.health = 320;
-        }
-        this.vlos.x *= 0.8
-        for(let i = this.fireballs.length-1; i>0; i--){
-            this.fireballs[i].update(delta);
-        }
-        if(this.heavy){
-            this.vlos.x *= 0.8;
-            this.vlos.y += 3;
-        }
-        if(this.health<=0){
-            this.onDeath.emit()
-            
-        }
-        
     }
     reset(pos=new Vector(1920/2,1080/2)){
         this.health = 100;
+        if(this.twoPlayer){
+            this.health = 50;
+        }
         this.power = 0.2;
         this.anger = 0;
         this.vlos = new Vector(0,0);
@@ -199,9 +221,13 @@ export class Dragon {
     }
     draw(){
         let rot = Math.sign(this.vlos.x) * Math.PI/4 * Math.pow(this.vlos.y,0.3)/2
-        this.Draw.image(this.image,this.pos,this.size,new Vector(Math.sign(this.vlos.x*-1)),rot)
+        if(!this.died){
+            this.Draw.image(this.image,this.pos,this.size,new Vector(Math.sign(this.vlos.x*-1)),rot)
+        }
         for(let i = this.fireballs.length-1; i>0; i--){
-            this.fireballs[i].draw();
+            if(this.fireballs[i].time>0){
+                this.fireballs[i].draw();
+            }
         }
     }
 }
@@ -215,6 +241,7 @@ export class FireBall {
         this.power = power;
         this.destroy = new Signal()
         this.Draw = draw
+        this.time = 0;
         this.rot = rot
         this.size = new Vector(1,1).mult(Math.max(power,1)*50)
         this.image = image
@@ -223,6 +250,7 @@ export class FireBall {
         this.destroy.emit(this)
     }
     update(delta){
+        this.time+=delta;
         this.pos.addS(this.vlos.mult(this.speed * delta))
         this.size = new Vector(1,1).mult(Math.min(this.power,5)*50)
         if(!Geometry.rectCollide(Vector.zero(),new Vector(1920,1080),this.pos,this.size)){

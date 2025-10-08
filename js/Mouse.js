@@ -5,12 +5,12 @@ export default class Mouse {
         this.rect = rect;
         this.scale = scale;
         this.pos = new Vector();
-    // Tap detection variables
-    this._tapStart = 0;
-    this._tapStartX = 0;
-    this._tapStartY = 0;
-    this._TAP_THRESHOLD = 200; // ms
-    this._MOVE_THRESHOLD = 10; // px
+        // Tap detection variables
+        this._tapStart = 0;
+        this._tapStartX = 0;
+        this._tapStartY = 0;
+        this._TAP_THRESHOLD = 200; // ms
+        this._MOVE_THRESHOLD = 10; // px
         this.prevPos = new Vector();
         this.grabPos = null;
         this.scrollDelta = 0;
@@ -141,7 +141,7 @@ export default class Mouse {
 
     getGrabDelta() {
         if (!this.grabPos) return new Vector(0, 0);
-        return this.pos.subtract(this.grabPos);
+        return this.pos.sub(this.grabPos);
     }
 
     scroll(mode = null, returnBool = false) {

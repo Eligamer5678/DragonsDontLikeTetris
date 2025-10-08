@@ -18,7 +18,9 @@ export class DesktopScene extends Scene {
     }
     onSwitchTo() {
         // Disconnect debug signals when switching out of this scene
-        this.dragon.reset(new Vector(1920/2,1080/2));
+        this.dragons.forEach((dragon)=>{
+            dragon.reset(new Vector(1920/2,1080/2));
+        })
         this.sessionTimer.reset();
         this.deaths = 0;
         this.aiScore = 0;
@@ -38,7 +40,7 @@ export class DesktopScene extends Scene {
         resources.set('narrator',this.narrator)
         resources.set('pause',this.elements.get('pause'))
         resources.set('settings-button',this.elements.get('settings-button'))
-        resources.set('dragon',this.dragon)
+        resources.set('dragon',this.dragons[0])
         return resources; 
     }
     onSwitchFrom(resources) {
@@ -62,7 +64,7 @@ export class DesktopScene extends Scene {
                 case 'musician': this.musician = value; break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
-                case 'dragon': this.dragon = value; break;
+                case 'dragons': this.dragons = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
@@ -105,7 +107,9 @@ export class DesktopScene extends Scene {
                 icon.health = 100;
                 icon.destroy.connect(() => {
                     this.icons = this.icons.filter(ic => ic !== icon);
-                    this.dragon.power += 0.2;
+                    this.dragons.forEach((dragon)=>{
+                        dragon.power += 0.2;
+                    })
                     if (this.icons.length === 0) {
                         console.log('All desktop icons deleted!');
                         this.switchScene('bsod');
@@ -127,7 +131,9 @@ export class DesktopScene extends Scene {
         if(this.loaded===4){
             this.loaded+=1;
         }
-        this.dragon.update(delta);
+        this.dragons.forEach((dragon)=>{
+            dragon.update(delta);
+        })
         this.mouse.setMask(0);
         this.mouse.setPower(0);
 
@@ -136,19 +142,21 @@ export class DesktopScene extends Scene {
             icon.update(delta);
         }
         // Check fireball collisions with icons
-        for (let fireball of this.dragon.fireballs) {
-            for (let icon of this.icons) {
-                if (Geometry.rectCollide(fireball.pos, fireball.size, icon.pos, icon.size)) {
-                    icon.health -= fireball.power * 10;
-                    this.soundGuy.play('fireball');
-                    if (icon.health <= 0) {
-                        this.soundGuy.play('break');
-                        icon.adiós();
+        this.dragons.forEach((dragon)=>{
+            for (let fireball of dragon.fireballs) {
+                for (let icon of this.icons) {
+                    if (Geometry.rectCollide(fireball.pos, fireball.size, icon.pos, icon.size)) {
+                        icon.health -= fireball.power * 10;
+                        this.soundGuy.play('fireball');
+                        if (icon.health <= 0) {
+                            this.soundGuy.play('break');
+                            icon.adiós();
+                        }
+                        fireball.adiós('hit icon');
                     }
-                    fireball.adiós('hit icon');
                 }
             }
-        }
+        })
 
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
         for (let elm of sortedElements){
@@ -176,7 +184,9 @@ export class DesktopScene extends Scene {
         }
         this.UIDraw.useCtx('overlays')
         this.UIDraw.clear()
-        this.dragon.draw()
+        this.dragons.forEach((dragon)=>{
+            dragon.draw()
+        })
         this.UIDraw.useCtx('UI')
     }
 

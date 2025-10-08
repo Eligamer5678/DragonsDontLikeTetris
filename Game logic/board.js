@@ -5,7 +5,7 @@ import { Tetromino } from './tetrominos.js'
 import Geometry from "../js/Geometry.js";
 
 export default class Board {
-    constructor(Draw, dragon, size=new Vector(1080/2*0.9,1080*0.9)){
+    constructor(Draw, dragons, size=new Vector(1080/2*0.9,1080*0.9)){
         this.Draw = Draw;
         this.size = size;
         this.gridPos = new Vector(1920/2-this.size.x/2,1080/2-this.size.y/2);
@@ -28,7 +28,7 @@ export default class Board {
         this.blockDamaged = new Signal();
         this.blockBroken = new Signal();
         this.dmgMult = 1;
-        this.dragon = dragon;
+        this.dragons = dragons;
         this.glitchColor = new Color(0.9,1,1);
         this.onPlace.connect(()=>this.clearLines())
     }
@@ -380,8 +380,8 @@ export default class Board {
 
     spawnGlitch(){
         // Get dragon's grid position
-        const dragonGridX = Math.floor((this.dragon.pos.x - this.gridPos.x) / (this.size.x / 10));
-        const dragonGridY = Math.floor((this.dragon.pos.y - this.gridPos.y) / (this.size.y / 20));
+        const dragonGridX = Math.floor((this.dragons[0].pos.x - this.gridPos.x) / (this.size.x / 10));
+        const dragonGridY = Math.floor((this.dragons[0].pos.y - this.gridPos.y) / (this.size.y / 20));
         let tries = 0;
         let x, y;
         do {
@@ -422,9 +422,8 @@ export default class Board {
         }
     }
 
-    update(delta) {
-        // --- Fireball collision: loop over fireballs, not tiles ---
-        for (let fireball of this.dragon.fireballs) {
+    collideFire(dragon){
+        for (let fireball of dragon.fireballs) {
             if (!fireball) continue;
             // Compute affected grid range
             let minX = Math.floor((fireball.pos.x - this.gridPos.x) / (this.size.x / 10));
@@ -448,8 +447,8 @@ export default class Board {
                             this.board[y][x] = 0;
                             this.blockBroken.emit();
                             this.sessionBlocks += 1;
-                            this.dragon.anger *= 1.0015;
-                            if (this.dragon.anger > 1) this.dragon.anger = 1;
+                            dragon.anger *= 1.0015;
+                            if (dragon.anger > 1) dragon.anger = 1;
                         }
                         fireball.power -= 0.5;
                         this.blockDamaged.emit(new Vector(tileX + tileW / 2, tileY + tileH / 2));
@@ -458,12 +457,13 @@ export default class Board {
             }
             if (fireball.power <= 0) {
                 fireball.adiós();
-                this.dragon.power *= 1.002;
-                this.dragon.anger += 0.005;
+                dragon.power *= 1.002;
+                dragon.anger += 0.005;
             }
         }
+    }
 
-        // --- Tile/dragon collision: unchanged ---
+    collideTile(dragon){
         for (let y = 0; y < this.board.length; y++) {
             for (let x = 0; x < this.board[y].length; x++) {
                 if (this.board[y][x] <= 0 || !this.board[y][x]) { 
@@ -472,8 +472,8 @@ export default class Board {
                 }
                 if(this.board[y][x]>2&&this.board[y][x]<5){//Glitched blocks
                     this.board[y][x] = 0;
-                    this.dragon.health +=5;
-                    this.dragon.power += 0.05;
+                    dragon.health +=5;
+                    dragon.power += 0.05;
                 }
                 let tileX = x * this.size.x / 10 + this.gridPos.x;
                 let tileY = y * this.size.y / 20 + this.gridPos.y;
@@ -484,129 +484,142 @@ export default class Board {
                 // --- Horizontal collisions ---
                 // Right side
                 let collided = false
-                if(this.dragon.power < 3 || this.board[y][x] >=5){
-                    if (this.dragon.pos.x + this.dragon.vlos.x + this.dragon.size.x >= tileX &&
-                        this.dragon.pos.x <= tileX &&
-                        this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
-                        this.dragon.pos.y + 2 < tileY + tileH
+                if(dragon.power < 3 || this.board[y][x] >=5){
+                    if (dragon.pos.x + dragon.vlos.x + dragon.size.x >= tileX &&
+                        dragon.pos.x <= tileX &&
+                        dragon.pos.y + dragon.size.y - 2 > tileY &&
+                        dragon.pos.y + 2 < tileY + tileH
                     ) {
-                        this.dragon.pos.x = tileX - this.dragon.size.x;
-                        this.dragon.vlos.x *= 0.0001;
+                        dragon.pos.x = tileX - dragon.size.x;
+                        dragon.vlos.x *= 0.0001;
                         collided = true;
                     }
                     // Left side
-                    if (this.dragon.pos.x + this.dragon.vlos.x <= tileX + tileW &&
-                        this.dragon.pos.x + this.dragon.size.x >= tileX + tileW &&
-                        this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
-                        this.dragon.pos.y + 2 < tileY + tileH
+                    if (dragon.pos.x + dragon.vlos.x <= tileX + tileW &&
+                        dragon.pos.x + dragon.size.x >= tileX + tileW &&
+                        dragon.pos.y + dragon.size.y - 2 > tileY &&
+                        dragon.pos.y + 2 < tileY + tileH
                     ) {
-                        this.dragon.pos.x = tileX + tileW;
-                        this.dragon.vlos.x *= 0.0001;
+                        dragon.pos.x = tileX + tileW;
+                        dragon.vlos.x *= 0.0001;
                         collided = true;
                     }
 
                     // --- Vertical collisions ---
                     // Bottom (floor)
-                    if (this.dragon.pos.y + this.dragon.vlos.y + this.dragon.size.y >= tileY &&
-                        this.dragon.pos.y <= tileY &&
-                        this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
-                        this.dragon.pos.x + 2 < tileX + tileW
+                    if (dragon.pos.y + dragon.vlos.y + dragon.size.y >= tileY &&
+                        dragon.pos.y <= tileY &&
+                        dragon.pos.x + dragon.size.x - 2 > tileX &&
+                        dragon.pos.x + 2 < tileX + tileW
                     ) {
-                        this.dragon.pos.y = tileY - this.dragon.size.y;
-                        this.dragon.vlos.y *= -0.2;
+                        dragon.pos.y = tileY - dragon.size.y;
+                        dragon.vlos.y *= -0.2;
                         collided = true;
                     }
                     // Top (ceiling)
-                    if (this.dragon.pos.y + this.dragon.vlos.y <= tileY + tileH &&
-                        this.dragon.pos.y + this.dragon.size.y >= tileY + tileH &&
-                        this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
-                        this.dragon.pos.x + 2 < tileX + tileW
+                    if (dragon.pos.y + dragon.vlos.y <= tileY + tileH &&
+                        dragon.pos.y + dragon.size.y >= tileY + tileH &&
+                        dragon.pos.x + dragon.size.x - 2 > tileX &&
+                        dragon.pos.x + 2 < tileX + tileW
                     ) {
-                        this.dragon.pos.y = tileY + tileH;
-                        this.dragon.vlos.y *= -0.2;
+                        dragon.pos.y = tileY + tileH;
+                        dragon.vlos.y *= -0.2;
                         collided = true;
                     }
                 }
                 if(collided && this.board[y][x] >= 5){
-                    this.dragon.health -=0.5*this.dmgMult;
+                    dragon.health -=0.5*this.dmgMult;
                 }
             }
         }
+    }
 
+    collideActive(dragon){
         for (let part of this.activeTetromino.getPositions()){
             let collided = false
             let tileX = part.x * this.size.x / 10 + this.gridPos.x;
             let tileY = part.y * this.size.y / 20 + this.gridPos.y;
             let tileW = this.size.x / 10;
             let tileH = this.size.y / 20;
-            if(this.dragon.power < 3){
-                if (this.dragon.pos.x + this.dragon.vlos.x + this.dragon.size.x >= tileX &&
-                    this.dragon.pos.x <= tileX &&
-                    this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
-                    this.dragon.pos.y + 2 < tileY + tileH
+            if(dragon.power < 3){
+                if (dragon.pos.x + dragon.vlos.x + dragon.size.x >= tileX &&
+                    dragon.pos.x <= tileX &&
+                    dragon.pos.y + dragon.size.y - 2 > tileY &&
+                    dragon.pos.y + 2 < tileY + tileH
                 ) {
-                    this.dragon.pos.x = tileX - this.dragon.size.x;
-                    this.dragon.vlos.x *= 0.0001;
+                    dragon.pos.x = tileX - dragon.size.x;
+                    dragon.vlos.x *= 0.0001;
                     collided = true;
                 }
                 // Left side
-                if (this.dragon.pos.x + this.dragon.vlos.x <= tileX + tileW &&
-                    this.dragon.pos.x + this.dragon.size.x >= tileX + tileW &&
-                    this.dragon.pos.y + this.dragon.size.y - 2 > tileY &&
-                    this.dragon.pos.y + 2 < tileY + tileH
+                if (dragon.pos.x + dragon.vlos.x <= tileX + tileW &&
+                    dragon.pos.x + dragon.size.x >= tileX + tileW &&
+                    dragon.pos.y + dragon.size.y - 2 > tileY &&
+                    dragon.pos.y + 2 < tileY + tileH
                 ) {
-                    this.dragon.pos.x = tileX + tileW;
-                    this.dragon.vlos.x *= 0.0001;
+                    dragon.pos.x = tileX + tileW;
+                    dragon.vlos.x *= 0.0001;
                     collided = true;
                 }
 
                 // --- Vertical collisions ---
                 // Bottom (floor)
-                if (this.dragon.pos.y + this.dragon.vlos.y + this.dragon.size.y >= tileY &&
-                    this.dragon.pos.y <= tileY &&
-                    this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
-                    this.dragon.pos.x + 2 < tileX + tileW
+                if (dragon.pos.y + dragon.vlos.y + dragon.size.y >= tileY &&
+                    dragon.pos.y <= tileY &&
+                    dragon.pos.x + dragon.size.x - 2 > tileX &&
+                    dragon.pos.x + 2 < tileX + tileW
                 ) {
-                    this.dragon.pos.y = tileY - this.dragon.size.y;
-                    this.dragon.vlos.y *= -0.2;
+                    dragon.pos.y = tileY - dragon.size.y;
+                    dragon.vlos.y *= -0.2;
                     collided = true;
                 }
                 // Top (ceiling)
-                if (this.dragon.pos.y + this.dragon.vlos.y <= tileY + tileH &&
-                    this.dragon.pos.y + this.dragon.size.y >= tileY + tileH &&
-                    this.dragon.pos.x + this.dragon.size.x - 2 > tileX &&
-                    this.dragon.pos.x + 2 < tileX + tileW
+                if (dragon.pos.y + dragon.vlos.y <= tileY + tileH &&
+                    dragon.pos.y + dragon.size.y >= tileY + tileH &&
+                    dragon.pos.x + dragon.size.x - 2 > tileX &&
+                    dragon.pos.x + 2 < tileX + tileW
                 ) {
-                    this.dragon.pos.y = tileY + tileH;
-                    this.dragon.vlos.y *= -0.2;
+                    dragon.pos.y = tileY + tileH;
+                    dragon.vlos.y *= -0.2;
                     collided = true;
                 }
             }
             if(collided){
-                this.dragon.health -= 1*this.dmgMult;
+                dragon.health -= 1*this.dmgMult;
                 this.damageDragon.emit()
             }
         }
-        
-        if(this.dragon.power<4){
-            if(this.dragon.pos.y+this.dragon.size.y>this.gridPos.y+this.size.y){
-                this.dragon.pos.y = this.gridPos.y+this.size.y - this.dragon.size.y;
-                if(this.dragon.vlos.y > 0){
-                    this.dragon.vlos.y =0
+    }
+
+    collideWall(dragon){
+        if(dragon.power<4){
+            if(dragon.pos.y+dragon.size.y>this.gridPos.y+this.size.y){
+                dragon.pos.y = this.gridPos.y+this.size.y - dragon.size.y;
+                if(dragon.vlos.y > 0){
+                    dragon.vlos.y =0
                 }
             }
-            if(this.dragon.pos.y<this.gridPos.y){
-                this.dragon.pos.y = this.gridPos.y;
-                if(this.dragon.vlos.y < 0){
-                    this.dragon.vlos.y = 0
+            if(dragon.pos.y<this.gridPos.y){
+                dragon.pos.y = this.gridPos.y;
+                if(dragon.vlos.y < 0){
+                    dragon.vlos.y = 0
                 }
             }
-            if(this.dragon.pos.x+this.dragon.size.x>this.gridPos.x+this.size.x){
-                this.dragon.pos.x = this.gridPos.x+this.size.x - this.dragon.size.x;
+            if(dragon.pos.x+dragon.size.x>this.gridPos.x+this.size.x){
+                dragon.pos.x = this.gridPos.x+this.size.x - dragon.size.x;
             }
-            if(this.dragon.pos.x < this.gridPos.x){
-                this.dragon.pos.x = this.gridPos.x;
+            if(dragon.pos.x < this.gridPos.x){
+                dragon.pos.x = this.gridPos.x;
             }
         }
+    }
+
+    update(delta) {
+        this.dragons.forEach((dragon) => {
+            this.collideWall(dragon);
+            this.collideTile(dragon);
+            this.collideActive(dragon);
+            this.collideFire(dragon);  
+        });
     }
 }

@@ -11,7 +11,7 @@ export default class Scene {
         this.switchScene = switchScene;
         this.loadScene = loadScene;
         this.preloadScene = preloadScene;
-        this.removeScene;
+        this.removeScene = removeScene;
         this.elements = new Map()
     }
 

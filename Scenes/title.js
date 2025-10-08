@@ -98,6 +98,8 @@ export class TitleScene extends Scene {
         this.BackgroundImageLinks = {
             'ui1':'Assets/Backgrounds/Base UI 1.png',
             'ui2':'Assets/Backgrounds/Base UI 2.png',
+            'coop-ui1':'Assets/Backgrounds/Base coop UI 1.png',
+            'coop-ui2':'Assets/Backgrounds/Base coop UI 2.png',
             'settings':'Assets/Backgrounds/Base Settings.png',
             'background':'Assets/Backgrounds/Base Background.png',
             'title':'Assets/Backgrounds/Title screen.png',
@@ -109,11 +111,13 @@ export class TitleScene extends Scene {
             'fireball':'Assets/Sprites/fireball.png',
             'mega-fireball':'Assets/Sprites/fireball2.png',
             'dragon':'Assets/Sprites/dragon.png',
+            'blue-dragon':'Assets/Sprites/blue dragon.png',
             'fragment':'Assets/Sprites/fragment.png',
         }
         this.SpriteImages = {
             'fireball':new Image(),
             'dragon':new Image(),
+            'blue-dragon':new Image(),
             'mega-fireball':new Image(),
             'fragment':new Image(),
             
@@ -125,6 +129,8 @@ export class TitleScene extends Scene {
             'title':new Image(),
             'ui1':new Image(),
             'ui2':new Image(),
+            'coop-ui1':new Image(),
+            'coop-ui2':new Image(),
             'modifiers':new Image(),
             'desktop':new Image(),
 
@@ -330,13 +336,15 @@ export class TitleScene extends Scene {
                 case 'musician': break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
-                case 'dragon': this.dragon = value; break;
+                case 'dragons': this.dragon = value[0]; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
             if (log) console.log(`Loaded: ${key}`);
         }
+        this.twoPlayer = false;
+        this.genBlocks()
         this.conductor.reset();
     }
 
@@ -352,26 +360,89 @@ export class TitleScene extends Scene {
         resources.set('conductor',this.conductor)
         resources.set('narrator',this.narrator)
         resources.set('pause',this.pauseMenu)
-        resources.set('dragon',this.dragon)
+        resources.set('dragons',this.dragons)
+        resources.set('twoPlayer',this.twoPlayer)
         resources.set('settings-button',this.elements.get('settings-button'))
         return resources; 
     }
 
     onReady() {
+        // --- 2 player mode setup ---
+        this.twoPlayer = false;
+        if (this.blocks && this.blocks.length > 0) {
+            const idx = Math.floor(Math.random() * this.blocks.length);
+            console.log('2P block index:', idx, this.blocks[idx]);
+        }
         this.isReady = true;
         this.createUI()
-        this.dragon = new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(690,75),this.SpriteImages)
-        this.dragon.vlos = new Vector(0.0001,0);
+        this.dragons = [new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(690,75),this.SpriteImages)]
+        this.dragons[0].vlos = new Vector(0.0001,0);
         // Hide loading overlay now
         try {
             this._loadingOverlay && this._loadingOverlay.hide();
         } catch (e) { /* ignore */ }
+
+        this.createRectTool();
+        // --- Generalize blocks: grid align and split big ones ---
+        this.genBlocks()
+        this.saver.set('twoPlayer',false)
+        
+    }
+    genBlocks(){
+        const grid = 120;
+        const ratio = 0.3
+        const rawBlocks = [
+            {pos: {x:1688.377219840784, y:848.487486398259}, size: {x:-114.04776484996933, y:-112.81828073993472}},
+            {pos: {x:1918.8242498469076, y:501.8063112078346}, size: {x:-460.89406001224734, y:231.51251360174103}},
+            {pos: {x:1918.8242498469076, y:501.8063112078346}, size: {x:-112.87201469687693, y:-115.16866158868339}},
+            {pos: {x:1456.7544396815676, y:847.3122959738846}, size: {x:463.2455603184326, y:231.51251360174092}},
+            {pos: {x:1688.377219840784, y:734.4940152339499}, size: {x:231.6227801592163, y:113.99347116430908}},
+            {pos: {x:1456.7544396815676, y:1075.2992383025028}, size: {x:-114.04776484996933, y:-110.46789989118622}},
+            {pos: {x:460.89406001224745, y:847.3122959738846}, size: {x:-462.0698101653399, y:222.11099020674646}},
+            {pos: {x:577.2933251684018, y:962.4809575625679}, size: {x:-115.22351500306189, y:104.5919477693144}},
+            {pos: {x:229.27127985303125, y:615.7997823721436}, size: {x:-110.52051439069199, y:230.33732317736667}},
+            {pos: {x:116.39926515615433, y:728.6180631120783}, size: {x:-115.22351500306186, y:119.86942328618068}}
+        ];
+        this.blocks = [];
+        rawBlocks.forEach(b => {
+            // Normalize negative sizes
+            let pos = {...b.pos};
+            let size = {...b.size};
+            if(size.x < 0) { pos.x += size.x; size.x = Math.abs(size.x); }
+            if(size.y < 0) { pos.y += size.y; size.y = Math.abs(size.y); }
+            // Round position and size to grid
+            let startX = Math.floor(pos.x / grid) * grid;
+            let startY = Math.floor(pos.y / grid) * grid;
+            let endX = Math.ceil((pos.x + size.x) / grid) * grid;
+            let endY = Math.ceil((pos.y + size.y) / grid) * grid;
+            // Split into grid-aligned blocks, but only if 80% of the block is within the original area
+            for(let x = startX; x < endX; x += grid) {
+                for(let y = startY; y < endY; y += grid) {
+                    let blockW = Math.min(grid, endX - x);
+                    let blockH = Math.min(grid, endY - y);
+                    // Calculate overlap area
+                    let overlapX = Math.max(0, Math.min(x+blockW, pos.x+size.x) - Math.max(x, pos.x));
+                    let overlapY = Math.max(0, Math.min(y+blockH, pos.y+size.y) - Math.max(y, pos.y));
+                    let overlapArea = overlapX * overlapY;
+                    let blockArea = blockW * blockH;
+                    if (blockArea > 0 && overlapArea / blockArea >= ratio) {
+                        this.blocks.push({
+                            pos: {x: x, y: y},
+                            size: {x: blockW, y: blockH},
+                            hp: 5,
+                            destroyed: false,
+                        });
+                    }
+                }
+            }
+        });
     }
 
     createUI(){
         let startButton = new UIButton(this.mouse,this.keys,new Vector(660,462),new Vector(600,200),1,'Enter','#FF000000','#FFFFFF33','#00000055')
         let modifierButton = new UIButton(this.mouse,this.keys,new Vector(660,720),new Vector(600,190),1,null,'#FF000000','#FFFFFF33','#00000055')
         startButton.onPressed.left.connect(async ()=>{
+            this.removeScene('game')
             this.switchScene('game')
             this.conductor.reset()
             this.conductor.setVolume(this.settings.volume.music,3)
@@ -481,10 +552,33 @@ export class TitleScene extends Scene {
         for (const elm of sortedElements) {
             elm.draw(this.UIDraw);
         }
+        this.blocks.forEach((block, i) => {
+            let color = new Color(0.6,1,0.3,1)
+            color.d = block.hp/5   
+            if (i===0) {
+                color = new Color(0.55,1,0.3,Math.max(this.blocks.length/33,0.2));
+                // Draw blue-dragon image beneath block, in background context
+                this.Draw.image(
+                    this.SpriteImages['blue-dragon'],
+                    new Vector(block.pos.x+40, block.pos.y+40),
+                    new Vector(40, 40),
+                    false,
+                    0.2
+                );
+            }
+            if(this.mouse.pressed('left') && Geometry.pointInRect(this.mouse.pos,block.pos,new Vector(120,120))){
+                console.log(i)
+            }
+            this.Draw.rect(new Vector(block.pos.x, block.pos.y), new Vector(block.size.x, block.size.y), color);
+        });
         this.UIDraw.useCtx('overlays')
         this.UIDraw.clear()
-        this.dragon.draw()
+        this.dragons.forEach((dragon)=>{
+            dragon.draw()
+        })
         this.UIDraw.useCtx('UI')
+
+        this.drawRectTool();
     }
 
     update(delta) {
@@ -499,51 +593,342 @@ export class TitleScene extends Scene {
         this.mouse.setMask(0);
         this.mouse.setPower(0);
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        this.dragon.update(delta);
-        for (let elm of sortedElements) {
-            elm.update(delta);
-            let collision = Geometry.spriteToTile(this.dragon.pos.clone(), this.dragon.vlos.clone(), this.dragon.size, elm.pos, elm.size);
-            if (collision) {
-                this.dragon.pos = collision.pos;
-                this.dragon.vlos = collision.vlos;
+        this.dragons.forEach((dragon)=>{
+            dragon.update(delta);
+            for (let elm of sortedElements) {
+                elm.update(delta);
+                let collision = Geometry.spriteToTile(dragon.pos.clone(), dragon.vlos.clone(), dragon.size, elm.pos, elm.size);
+                if (collision) {
+                    dragon.pos = collision.pos;
+                    dragon.vlos = collision.vlos;
+                }
             }
-        }
-
-        // --- Fireball -> UIButton interaction (same logic as modifier scene) ---
-        if (this.dragon && this.dragon.fireballs && this.dragon.fireballs.length > 0) {
-            const fires = this.dragon.fireballs.slice();
-            // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
-            // but include any child buttons the pause container may hold, and only if visible.
-            const buttons = [];
-            for (const [key, el] of this.elements.entries()) {
-                if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
-            }
-
-            for (let fire of fires) {
-                for (let btn of buttons) {
-                    if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
-                        try {
-                            btn.onPressed.left.emit();
-                        } catch (e) {
-                            if (btn.trigger) {
-                                btn.triggered = !btn.triggered;
-                                btn.onTrigger.emit(btn.triggered);
+        })
+        // block & fireball collision
+        for (let i = 0; i < this.blocks.length; ++i) {
+            let block = this.blocks[i];
+            // Dragon standing on block
+            this.dragons.forEach((dragon)=>{
+                if (dragon) {
+                    let collision = Geometry.spriteToTile(
+                        dragon.pos.clone(),
+                        dragon.vlos.clone(),
+                        dragon.size,
+                        new Vector(block.pos.x, block.pos.y),
+                        new Vector(block.size.x, block.size.y)
+                    );
+                    if (collision) {
+                        dragon.pos = collision.pos;
+                        dragon.vlos = collision.vlos;
+                        dragon.onBlock = block;
+                    }
+                }
+                // Fireball collision
+                if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
+                    for (let fire of dragon.fireballs) {
+                        let fireCollision = Geometry.spriteToTile(
+                            fire.pos.clone(),
+                            fire.vlos ? fire.vlos.clone() : new Vector(0,0),
+                            new Vector(fire.size.x,0),
+                            new Vector(block.pos.x, block.pos.y),
+                            new Vector(block.size.x, block.size.y)
+                        );
+                        if (fireCollision) {
+                            block.hp -= 0.5;
+                            if (block.hp <= 0) {
+                                block.destroyed = true;
                             }
                         }
-                        // Destroy the fireball so it can't trigger multiple buttons
-                        try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
-
-                        // Provide a quick visual feedback: pulse the baseColor
-                        if (btn.baseColor) {
-                            const orig = btn.baseColor;
-                            btn.baseColor = '#FFFFFF44';
-                            setTimeout(() => { btn.baseColor = orig; }, 120);
+                    }
+                }
+            })
+        }
+        // Remove destroyed blocks
+        this.blocks = this.blocks.filter(b => !b.destroyed);
+        if(this.blocks.length===0 && this.twoPlayer===false){
+            this.twoPlayer = true;
+            this.saver.set('twoPlayer',true)
+            this.dragons = [
+                new Dragon(this.mouse, this.keys, this.UIDraw, this.dragons[0].pos,this.SpriteImages,'wasd'),
+                new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(40+100,800),this.SpriteImages,'arrows'),
+            ]
+            this.dragons[0].which = 0;
+            this.dragons[1].which = 1;
+            this.dragons[0].twoPlayer = true;
+            this.dragons[1].twoPlayer = true;
+            this.dragons[1].image = this.SpriteImages['blue-dragon'];
+        }
+        // ui + fireball collision
+        this.dragons.forEach((dragon)=>{
+            if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
+                const fires = dragon.fireballs.slice();
+                // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
+                // but include any child buttons the pause container may hold, and only if visible.
+                const buttons = [];
+                for (const [key, el] of this.elements.entries()) {
+                    if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
+                }
+                
+                for (let fire of fires) {
+                    for (let btn of buttons) {
+                        if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
+                            try {
+                                btn.onPressed.left.emit();
+                            } catch (e) {
+                                if (btn.trigger) {
+                                    btn.triggered = !btn.triggered;
+                                    btn.onTrigger.emit(btn.triggered);
+                                }
+                            }
+                            // Destroy the fireball so it can't trigger multiple buttons
+                            try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
+                            
+                            // Provide a quick visual feedback: pulse the baseColor
+                            if (btn.baseColor) {
+                                const orig = btn.baseColor;
+                                btn.baseColor = '#FFFFFF44';
+                                setTimeout(() => { btn.baseColor = orig; }, 120);
+                            }
+                            break;
                         }
-                        break;
                     }
                 }
             }
-        }
+        })
         
+        this.updateRectTool();
+    }
+    
+    createRectTool(){
+        this.rects = [];
+        this.drawingRects = false;
+        this.selectedRect = null;
+        this.previewRect = null;
+        this.mode = 'draw';
+        this.editEdge = null; // {rect, edge}
+
+        
+    }
+    updateRectTool(){
+        // Start/stop drawing
+        if(this.keys.pressed('2')){
+            this.drawingRects = true;
+            this.selectedRect = null;
+            this.mode = 'draw';
+            this.editEdge = null;
+        }
+        if(this.keys.pressed('1')){
+            this.drawingRects = false;
+            this.selectedRect = null;
+            this.editEdge = null;
+        }
+        // Log
+        if(this.keys.pressed('3')){
+            this.rects.forEach((rect, i) => {
+                console.log(
+                    `Rect ${i}: pos.x=${rect.pos.x}, pos.y=${rect.pos.y}, size.x=${rect.size.x}, size.y=${rect.size.y}`
+                );
+            });
+        }
+        // Switch modes
+        if(this.keys.pressed('5')&&this.mode==='select') this.mode = 'grab';
+        if(this.keys.pressed('4')) this.mode = 'select';
+        if(this.keys.pressed('6')&&this.mode==='select') this.mode = 'draw';
+        if(this.keys.pressed('7')&&this.mode==='select') this.mode = 'edit';
+
+        // Update
+        if(!this.drawingRects) return;
+        if(this.mode==='draw'){
+            this.drawRect();
+        }
+        if(this.mode==='select'){
+            this.selectRect();
+        }
+        if(this.mode==='grab'){
+            this.grabRect();
+        }
+        if(this.mode==='edit'){
+            this.editRectEdge();
+        }
+    }
+    editRectEdge(){
+        // Select edge if none selected
+        if(!this.editEdge){
+            for(let rect of this.rects){
+                let mx = this.mouse.pos.x, my = this.mouse.pos.y;
+                let rx = rect.pos.x, ry = rect.pos.y, rw = rect.size.x, rh = rect.size.y;
+                const edgeDist = 8;
+                if(Math.abs(mx - rx) < edgeDist && my > ry && my < ry+rh && this.mouse.pressed('left')){
+                    this.editEdge = {rect, edge:'left', axis: null, grabStarted: false};
+                    break;
+                }
+                if(Math.abs(mx - (rx+rw)) < edgeDist && my > ry && my < ry+rh && this.mouse.pressed('left')){
+                    this.editEdge = {rect, edge:'right', axis: null, grabStarted: false};
+                    break;
+                }
+                if(Math.abs(my - ry) < edgeDist && mx > rx && mx < rx+rw && this.mouse.pressed('left')){
+                    this.editEdge = {rect, edge:'top', axis: null, grabStarted: false};
+                    break;
+                }
+                if(Math.abs(my - (ry+rh)) < edgeDist && mx > rx && mx < rx+rw && this.mouse.pressed('left')){
+                    this.editEdge = {rect, edge:'bottom', axis: null, grabStarted: false};
+                    break;
+                }
+            }
+            return;
+        }
+
+        let {rect, edge, axis, grabStarted} = this.editEdge;
+
+        // Start grab on x/y key
+        if(!grabStarted) {
+            if(this.keys.pressed('g') && (edge === 'left' || edge === 'right')) {
+                this.editEdge.axis = 'x';
+                this.editEdge.grabStarted = true;
+                this.mouse.grab(this.mouse.pos);
+                this.editEdge.originalPos = rect.pos.x;
+                this.editEdge.originalSize = rect.size.x;
+            }
+            if(this.keys.pressed('g') && (edge === 'top' || edge === 'bottom')) {
+                this.editEdge.axis = 'y';
+                this.editEdge.grabStarted = true;
+                this.mouse.grab(this.mouse.pos);
+                this.editEdge.originalPos = rect.pos.y;
+                this.editEdge.originalSize = rect.size.y;
+            }
+            // Allow deselect with right mouse
+            if(this.mouse.pressed('right')){
+                this.editEdge = null;
+                this.mouse.releaseGrab();
+            }
+            return;
+        }
+
+        // Move edge with grab delta
+        let delta = this.mouse.getGrabDelta();
+        if(this.editEdge.axis === 'x'){
+            if(edge === 'left'){
+                let newX = this.editEdge.originalPos + delta.x;
+                let maxX = rect.pos.x + rect.size.x - 8;
+                rect.pos.x = Math.min(newX, maxX);
+                rect.size.x = Math.max(this.editEdge.originalSize - delta.x, 8);
+            }
+            if(edge === 'right'){
+                rect.size.x = Math.max(this.editEdge.originalSize + delta.x, 8);
+            }
+        }
+        if(this.editEdge.axis === 'y'){
+            if(edge === 'top'){
+                let newY = this.editEdge.originalPos + delta.y;
+                let maxY = rect.pos.y + rect.size.y - 8;
+                rect.pos.y = Math.min(newY, maxY);
+                rect.size.y = Math.max(this.editEdge.originalSize - delta.y, 8);
+            }
+            if(edge === 'bottom'){
+                rect.size.y = Math.max(this.editEdge.originalSize + delta.y, 8);
+            }
+        }
+
+        // Release grab and deselect edge with right mouse, and reset shape
+        if(this.mouse.pressed('right')){
+            if(this.editEdge.grabStarted) {
+                // Reset to original position/size
+                if(this.editEdge.axis === 'x') {
+                    rect.pos.x = this.editEdge.originalPos;
+                    rect.size.x = this.editEdge.originalSize;
+                }
+                if(this.editEdge.axis === 'y') {
+                    rect.pos.y = this.editEdge.originalPos;
+                    rect.size.y = this.editEdge.originalSize;
+                }
+            }
+            this.editEdge = null;
+            this.mouse.releaseGrab();
+            return;
+        }
+        // Release grab when left mouse released
+        if( this.mouse.held('left')){
+            this.editEdge = null;
+            this.mouse.releaseGrab();
+        }
+    }
+    drawRect(){
+        // Drawing logic for the rectangle tool
+        if(this.mouse.pressed('left')){
+            this.mouse.grab(this.mouse.pos);
+        }
+        if(this.mouse.pressed('right')){
+            this.mouse.releaseGrab();
+            this.previewRect = null;
+        }
+        if(this.mouse.grabPos === null) return;
+        let grabDelta = this.mouse.getGrabDelta();
+        let startPos = this.mouse.grabPos;
+        this.previewRect = {
+            'pos': startPos.clone(),
+            'size': new Vector(grabDelta.x, grabDelta.y)
+        }
+        if(this.keys.pressed(' ')){
+            this.rects.push({
+                'pos': startPos.clone(),
+                'size': new Vector(grabDelta.x, grabDelta.y)
+            })
+            this.previewRect = null;
+            this.mouse.releaseGrab();
+        }
+    }
+    selectRect(){
+        this.rects.forEach((rect) => {
+            if(Geometry.rectCollide(this.mouse.pos, new Vector(1,1), rect.pos, rect.size)&&this.mouse.held('left')){
+                this.selectedRect = rect;
+            }
+        });
+    }
+    grabRect(){
+        if(!this.selectedRect) {this.mode = 'select'; return;}
+        if(this.mouse.grabPos === null){this.mouse.grab(this.mouse.pos);}
+        this.previewRect = { 'pos':this.selectedRect.pos.clone(), 'size':this.selectedRect.size.clone() };
+        let grabDelta = this.mouse.getGrabDelta();
+        this.previewRect.pos.addS(grabDelta);
+        if(this.mouse.pressed('right')){
+            this.mouse.releaseGrab();
+            this.previewRect = null;
+            this.mode = 'select';
+        }
+        if(this.keys.pressed(' ')||this.mouse.pressed('left')){
+            this.mouse.releaseGrab();
+            this.rects.splice(this.rects.indexOf(this.selectedRect),1);
+            this.rects.push({ 'pos':this.previewRect.pos.clone(), 'size':this.previewRect.size.clone() });
+            this.selectedRect = this.rects[this.rects.length-1];
+            this.previewRect = null;
+            this.mode = 'select';
+        }
+    }
+
+    drawRectTool(){
+        this.UIDraw.useCtx('overlays');
+        // Draw existing rectangles
+        for(let rect of this.rects){
+            this.UIDraw.rect(rect.pos, rect.size, '#00FF00FF');
+        }
+        // Draw preview rectangle
+        if(this.previewRect){
+            this.UIDraw.rect(this.previewRect.pos, this.previewRect.size, '#FF0000FF');
+            if(this.mode === 'grab') this.UIDraw.rect(this.previewRect.pos, this.previewRect.size, '#0000FF55');
+        }
+        if(this.selectedRect){
+            this.UIDraw.rect(this.selectedRect.pos, this.selectedRect.size, '#0000FFFF');
+        }
+        // Draw edge highlight in edit mode
+        if(this.mode==='edit' && this.editEdge){
+            let {rect, edge} = this.editEdge;
+            let rx = rect.pos.x, ry = rect.pos.y, rw = rect.size.x, rh = rect.size.y;
+            let color = '#FFFF00FF';
+            if(edge==='left') this.UIDraw.line(new Vector(rx+2,ry), new Vector(rx,ry+rh), color, 4);
+            if(edge==='right') this.UIDraw.line(new Vector(rx+rw-2,ry), new Vector(rx+rw,ry+rh), color, 4);
+            if(edge==='top') this.UIDraw.line(new Vector(rx,ry+2), new Vector(rx+rw,ry+2), color, 4);
+            if(edge==='bottom') this.UIDraw.line(new Vector(rx,ry+rh-2), new Vector(rx+rw,ry+rh), color, 4);
+        }
+        this.UIDraw.useCtx('UI');
     }
 }
