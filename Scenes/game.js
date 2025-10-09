@@ -113,7 +113,7 @@ export class GameScene extends Scene {
     }
     unpackResources(resources){
         if (!resources) {
-            console.error('No resources...');
+            console.log('No resources...');
             return false;
         }
 
@@ -306,7 +306,9 @@ export class GameScene extends Scene {
         this.dragonsLeft = this.playerCount;
         this.reviveDragons = false;
         this.dragons.forEach((dragon) => {
-            dragon.health = 50;
+            if(this.saver.get('twoPlayer')){
+                dragon.health = 50;
+            }
             dragon.onDeath.connect(()=>{
                 this.dragonsLeft -= 1; 
             })

@@ -1,4 +1,11 @@
 export default class Vector {
+    // Linearly interpolate between this and another vector
+    lerp(v, t) {
+        return new Vector(
+            this.x + (v.x - this.x) * t,
+            this.y + (v.y - this.y) * t
+        );
+    }
     constructor(x = 0, y = 0) {
         this.x = x;
         this.y = y;

@@ -106,6 +106,7 @@ export class TitleScene extends Scene {
             'bsod':'Assets/Backgrounds/BSOD.png',
             'desktop':'Assets/Backgrounds/windows.png',
             'modifiers':'Assets/Backgrounds/modifier_screen.png',
+            'multi-modifiers':'Assets/Backgrounds/multi-modifiers.png',
         }
         this.SpriteImageLinks = {
             'fireball':'Assets/Sprites/fireball.png',
@@ -132,6 +133,7 @@ export class TitleScene extends Scene {
             'coop-ui1':new Image(),
             'coop-ui2':new Image(),
             'modifiers':new Image(),
+            'multi-modifiers':new Image(),
             'desktop':new Image(),
 
         }
@@ -317,7 +319,7 @@ export class TitleScene extends Scene {
 
     onSwitchFrom(resources) {
         if (!resources) {
-            console.error('No resources...');
+            console.log('No resources...');
             return;
         }
 
@@ -369,10 +371,6 @@ export class TitleScene extends Scene {
     onReady() {
         // --- 2 player mode setup ---
         this.twoPlayer = false;
-        if (this.blocks && this.blocks.length > 0) {
-            const idx = Math.floor(Math.random() * this.blocks.length);
-            console.log('2P block index:', idx, this.blocks[idx]);
-        }
         this.isReady = true;
         this.createUI()
         this.dragons = [new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(690,75),this.SpriteImages)]
@@ -388,6 +386,7 @@ export class TitleScene extends Scene {
         this.saver.set('twoPlayer',false)
         
     }
+
     genBlocks(){
         const grid = 120;
         const ratio = 0.3
@@ -555,8 +554,8 @@ export class TitleScene extends Scene {
         this.blocks.forEach((block, i) => {
             let color = new Color(0.6,1,0.3,1)
             color.d = block.hp/5   
-            if (i===0) {
-                color = new Color(0.55,1,0.3,Math.max(this.blocks.length/33,0.2));
+            if (i===0&&this.blocks.length===33) {
+                color = new Color(0.55,1,0.3,color.d);
                 // Draw blue-dragon image beneath block, in background context
                 this.Draw.image(
                     this.SpriteImages['blue-dragon'],
@@ -638,27 +637,32 @@ export class TitleScene extends Scene {
                             block.hp -= 2;
                             if (block.hp <= 0) {
                                 block.destroyed = true;
+                                if(i===0){
+                                    if(this.twoPlayer===false){
+                                        this.twoPlayer = true;
+                                        this.saver.set('twoPlayer',true)
+                                        this.dragons = [
+                                            new Dragon(this.mouse, this.keys, this.UIDraw, this.dragons[0].pos,this.SpriteImages,'wasd'),
+                                            new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(40+1500,740),this.SpriteImages,'arrows'),
+                                        ]
+                                        this.dragons[0].which = 0;
+                                        this.dragons[1].which = 1;
+                                        this.dragons[0].twoPlayer = true;
+                                        this.dragons[1].twoPlayer = true;
+                                        this.dragons[1].image = this.SpriteImages['blue-dragon'];
+                                    }
+                                }
                             }
+                            
                         }
                     }
                 }
             })
         }
         // Remove destroyed blocks
+        
         this.blocks = this.blocks.filter(b => !b.destroyed);
-        if(this.blocks.length===0 && this.twoPlayer===false){
-            this.twoPlayer = true;
-            this.saver.set('twoPlayer',true)
-            this.dragons = [
-                new Dragon(this.mouse, this.keys, this.UIDraw, this.dragons[0].pos,this.SpriteImages,'wasd'),
-                new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(40+100,800),this.SpriteImages,'arrows'),
-            ]
-            this.dragons[0].which = 0;
-            this.dragons[1].which = 1;
-            this.dragons[0].twoPlayer = true;
-            this.dragons[1].twoPlayer = true;
-            this.dragons[1].image = this.SpriteImages['blue-dragon'];
-        }
+        
         // ui + fireball collision
         if(!this.saver.get('twoPlayer',false)){
             this.dragons.forEach((dragon)=>{

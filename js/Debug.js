@@ -473,4 +473,5 @@ window.Debug = new Debug();
 console.log('                ')
 console.log('End of message stream')
 console.log('                ')
+window.Debug.hide()
 export default Debug;

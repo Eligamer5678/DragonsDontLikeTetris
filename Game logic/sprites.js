@@ -45,6 +45,7 @@ export class Dragon {
         this.big = false;
         this.heavy = false;
         this.fireballTimer = 6
+        this.prevKey = ''
         this.lockHp = true;
         this.spin = 0;
         this.spinHeal = false;
@@ -93,9 +94,11 @@ export class Dragon {
         }
         if(this.keys.held('ArrowRight')&&(this.which===0||!this.twoPlayer)||(this.keys.held('d')||this.keys.held('D'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.x+=2*Math.max(Math.min(this.power,5),1)
+            this.prevKey = 'r'
         }
         if(this.keys.held('ArrowLeft')&&(this.which===0||!this.twoPlayer)||(this.keys.held('a')||this.keys.held('A'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.x-=2*Math.max(Math.min(this.power,5),1)
+            this.prevKey = 'l'
         }
         if(this.keys.pressed('ArrowUp')&&(this.which===0||!this.twoPlayer)||(this.keys.pressed('w')||this.keys.pressed('W'))&&(!this.twoPlayer||this.which===1)){
             this.vlos.y = -6 *Math.max(Math.min(this.power,5),1) - Math.abs(Math.min(Math.max(this.vlos.y,10),20))/10 *Math.max(Math.min(this.power,5),1)
@@ -153,6 +156,10 @@ export class Dragon {
             this.died = true;
             this.onDeath.emit()
             
+        }
+        if(Math.abs(this.vlos.x) < 0.01){
+            if(this.prevKey==='r') this.vlos.x = 0.001;
+            if(this.prevKey==='l') this.vlos.x =- 0.001;
         }
         
     }

@@ -333,13 +333,10 @@ class Program {
         let delta = (time - this.lastTime) / 1000;
         if (delta > 0.1) delta = 0.1;
         this.lastTime = time;
-
-        window.Debug.try();
         this.mouse.update(delta);
         this.keys.update(delta);
         this.update(delta);
         this.draw();
-        window.Debug.accept();
 
         requestAnimationFrame(this.loop.bind(this));
     }
