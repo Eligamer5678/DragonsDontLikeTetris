@@ -5,19 +5,134 @@ import Board from '../Game logic/board.js';
 import { Dragon,Appicon,FireBall,Fragment } from '../Game logic/sprites.js';
 import Timer from '../js/Timer.js';
 import { Particle } from '../Game logic/Particle.js';
-import { TitleScene } from './title.js';
+import BoardSerializer from '../Game logic/BoardSerializer.js';
+import { Tetromino } from '../Game logic/tetrominos.js';
 
-
-export class GameScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('game', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+export class GameScene extends Scene { 
+    constructor(...args) {
+        super('game', ...args);
         this.loaded = 0;
-        this.elements = new Map()
-        
+        this.elements = new Map();
+        this.tickCount = 0;       
+        this.tickRate = 42;       // this is 24 fps
+        this.tickAccumulator = 0; 
+        this.syncStep = 0;
     }
     async onPreload(resources=null) {
 
     }
+
+    sendState(localDragon){
+        if (this.server) {
+            if (!this.lastStateSend) this.lastStateSend = 0;
+            const now = performance.now();
+            if (now - this.lastStateSend >= this.tickRate) {
+                const diff = {};
+                
+                // Send positions
+                if (localDragon.pos.x !== this.lastSentPos?.[this.playerId]?.x ||
+                    localDragon.pos.y !== this.lastSentPos?.[this.playerId]?.y) {
+                    diff[this.playerId + 'x'] = localDragon.pos.x;
+                    diff[this.playerId + 'y'] = localDragon.pos.y;
+                    diff[this.playerId + 'd'] = Math.sign(localDragon.vlos.x);
+                    this.lastSentPos = this.lastSentPos || {};
+                    this.lastSentPos[this.playerId] = { ...localDragon.pos };
+                }
+
+                // Send current board
+                const encodedBoard = BoardSerializer.encode(this.Board.board);
+                diff[this.playerId + '_board'] = encodedBoard;
+
+                // Send other data
+                diff[this.playerId + 'paused'] = this.paused;
+                diff[this.playerId + 'cycle'] = this.Board.cycle;
+                diff[this.playerId + 'scene'] = {'scene':'game', 'time':now};
+                diff[this.playerId + 'canlock'] = this.Board.canlock;
+
+                // Send data
+                if (Object.keys(diff).length > 0) {
+                    this.server.sendDiff(diff);
+                }
+
+                this.lastStateSend = now;
+            }
+        }
+    }
+
+    applyRemoteState = (state) => {
+        if (!state) return;
+        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+        const ghost = this.dragons.find(d => d.id === remoteId);
+        if (ghost) {
+            if (state[remoteId + 'x'] !== undefined) ghost.pos.x = state[remoteId + 'x'];
+            if (state[remoteId + 'y'] !== undefined) ghost.pos.y = state[remoteId + 'y'];
+            if (state[remoteId + 'd'] !== undefined) ghost.vlos.x = 0.0001 * state[remoteId + 'd'];
+        }
+        this.applyTick(remoteId,state);
+        this.applyBoard(remoteId, state);
+
+        
+        if(state[remoteId+'scene']){
+            if(state[remoteId+'scene'].scene !== 'game' && this.playerId!=='p1'){
+                this.switchScene(state[remoteId+'scene'].scene)
+            }
+        }
+    }
+
+    applyTick(remoteId, state){
+        if (!(remoteId + 'tick') in state) return;
+        while (state[remoteId + 'tick'] > this.tickCount) this.tick();
+    }
+
+    applyBoard(remoteId, state){
+        if (!(remoteId + '_board') in state) return;
+
+        if (!(remoteId + 'canlock') in state) return;
+        if (!(remoteId + 'cycle') in state) return;
+
+        const remoteBoardArr = BoardSerializer.decode(state[remoteId + '_board']);
+        if(!remoteBoardArr) return;
+        const currentBoardArr = this.Board.board;
+        // Flip all values between 1 & 0 (ex. 0.2 -> 0.8)
+        function flipBoardValues(boardArr) {
+            return boardArr.map(row => row.map(val => (val <= 1 ? 1 - val : val)));
+        }
+        const flippedCurrent = flipBoardValues(currentBoardArr);
+        const flippedRemote = flipBoardValues(remoteBoardArr);
+        // Subtract all values less than one from prevBoard
+        if(this.Board.canlock && state[remoteId + 'canlock'] || this.Board.canlock && state[remoteId + 'cycle'] > this.Board.cycle){
+            for (let y = 0; y < this.Board.PrevBoard.length; y++) {
+                for (let x = 0; x < this.Board.PrevBoard[y].length; x++) {
+                    if(this.Board.PrevBoard[y][x]===true){
+                        this.Board.PrevBoard[y][x]===1
+                    }
+                    if (flippedCurrent[y][x] <= 1) {
+                        this.Board.PrevBoard[y][x] -= flippedCurrent[y][x];
+                    }
+                    if (flippedRemote[y][x] <= 1) {
+                        this.Board.PrevBoard[y][x] -= flippedRemote[y][x];
+                    }
+                    // If any values are now negative, set them to 0
+                    if (this.Board.PrevBoard[y][x] < 0) {
+                        this.Board.PrevBoard[y][x] = 0;
+                    }
+                }
+            }
+            if(this.Board.cycle < state[remoteId + 'cycle']){
+                this.Board.cycle = state[remoteId + 'cycle']
+            }
+            this.Board.lockTetromino(new Vector(0,1))
+        }
+        this.Board.board = [...this.Board.PrevBoard];
+        this.Board.clearLines()
+        // prevBoard becomes the current board
+        
+    }
+
+
+
+
+
     resetGame(){
         this.dragons.forEach((dragon)=>{
             dragon.died = false;
@@ -48,6 +163,7 @@ export class GameScene extends Scene {
             }
             this.SPEED = true;
         });
+        window.Debug.createSignal('clearserver',()=>{this.server.clearAllRooms()})
         window.Debug.createSignal('slow',()=>{
             if(this.SPEED === true){
                 this.fallTimer.onLoop.disconnect('fall1');
@@ -82,6 +198,8 @@ export class GameScene extends Scene {
             }
             logMemory();
         });
+        window.Debug.createSignal('pause',()=>{ this.pause(); });
+        window.Debug.createSignal('unpause',()=>{ this.unpause(); });
     }
     disconnectDebug(){
         window.Debug.disconnectSignal('setPower');
@@ -109,6 +227,7 @@ export class GameScene extends Scene {
         resources.set('pause',this.elements.get('pause'))
         resources.set('settings-button',this.elements.get('settings-button'))
         resources.set('dragons',this.dragons)
+        resources.set('id',this.playerId)
         return resources;
     }
     unpackResources(resources){
@@ -131,9 +250,10 @@ export class GameScene extends Scene {
                 case 'musician': this.musician = value; break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
-                case 'dragon': this.dragons = [value]; break;
+                case 'dragons': this.dragons = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
+                case 'id': this.playerId = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
@@ -195,7 +315,7 @@ export class GameScene extends Scene {
     }
     onSwitchFrom(resources) {
         if(!this.unpackResources(resources)) return false;
-        
+        this.RSS.connect((state) => {this.applyRemoteState(state)});
 
     }
     createParticles(){
@@ -267,70 +387,44 @@ export class GameScene extends Scene {
     }
     onReady() {
         this.isReady = true;
-        
-        this.createUI()
-        this.createTimers()
-        this.frameCount = 0;
-        
-        this.soundsPlayed = 0;
-        this.createParticles()
-        
 
-        // Session data
+        this.createUI();
+        this.createTimers();
+        this.frameCount = 0;
+
+        this.soundsPlayed = 0;
+        this.createParticles();
+
         this.deaths = 0;
         this.aiScore = 0;
         this.resets = 0;
         this.sessionBlocks = 0;
+        this.paused = false;
         this.lineMessages = [];
-        if(this.saver.get('twoPlayer',true)){
-            this.playerCount = 2;
-        }else{
-            this.playerCount = 1;
-        }
 
-        if(this.playerCount === 1){
-            this.dragons = [new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(1920/2,1080/2),this.SpriteImages,'')]
-        }
-        if(this.playerCount === 2){
-            this.dragons = [
-                new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(1920/2-100,1080/2),this.SpriteImages,'wasd'),
-                new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(1920/2+100,1080/2),this.SpriteImages,'arrows'),
-            ]
-            this.dragons[0].which = 0;
-            this.dragons[1].which = 1;
-            this.dragons[0].twoPlayer = true;
-            this.dragons[1].twoPlayer = true;
-            this.dragons[1].image = this.SpriteImages['blue-dragon'];
-        }
-        this.createBoard()
+        this.playerCount = this.saver.get('twoPlayer', true) ? 2 : 1;
+
+        this.createBoard();
         this.dragonsLeft = this.playerCount;
         this.reviveDragons = false;
-        this.dragons.forEach((dragon) => {
-            if(this.saver.get('twoPlayer')){
-                dragon.health = 50;
-            }
-            dragon.onDeath.connect(()=>{
-                this.dragonsLeft -= 1; 
-            })
-            if(this.dragonsLeft<=0) {
-                console.log("all dragons died.");
-                this.soundGuy.play('death');
-                this.deaths+=1;
-                dragon.reset(new Vector(1920/2,1080/2));
-                this.Board.reset();
-                this.lineMessages.push('HAHAHAHA!!!!!!!!!!!')
-                this.sessionTimer.reset();
-                this.aiScore = 0;
-                this.sessionBlocks = 0;
-            }
-            dragon.megaabilty.connect(()=>{
-                this.reviveDragons = true;
-            })
-        })
-        
-        this.connectDebug()
-        this.setConditions()
-        this.setMods()
+
+        this.dragons.forEach(dragon => {
+            dragon.reset(new Vector(1920 / 2, 1080 / 2));
+            dragon.health = this.playerCount === 2 ? 50 : 100;
+            dragon.onDeath.connect(() => { this.dragonsLeft -= 1; });
+            dragon.megaability.connect(() => { this.reviveDragons = true; });
+        });
+
+        this.connectDebug();
+        this.setConditions();
+        this.setMods();
+
+        // Setup multiplayer sync
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        if (localDragon) this.sendState(localDragon);
+        if (this.Board && this.Board.onSync) {
+            this.Board.onSync.connect(() => this.syncBoards());
+        }
     }
     narratorSounds(){
         // List of narrator sound actions in order, each returns true if played
@@ -352,6 +446,7 @@ export class GameScene extends Scene {
         }
     }
     updateTimers(delta){
+        if (this.paused) return;
         this.AITimer.update(delta);
         this.fallTimer.update(delta);
         this.sessionTimer.update(delta);
@@ -395,75 +490,74 @@ export class GameScene extends Scene {
         }
     }
     update(delta) {
-        if(!this.isReady) return;
-        this.frameCount += 1;
-        this.updateTimers(delta)
-        this.narratorSounds();
-        if(this.saver.get('modifiers/modifier5', false)){
-            this.dragons.forEach((dragon) => {
-                dragon.health += dragon.power*delta/10;
-                if(dragon.health > dragon.power*10){
-                    dragon.health = dragon.power*10
-                }
-            })
+        if (!this.isReady) return;
+
+        this.tickAccumulator += delta * 1000; // convert to ms
+        while (this.tickAccumulator >= this.tickRate) {
+            if(!this.paused){
+                this.tick();
+            }
+            this.tickAccumulator -= this.tickRate;
         }
-        if(this.reviveDragons){
-            this.dragons.forEach((dragon) => {
-                console.log('ability activated')
-                if(dragon.died){
+        this.frameCount+=1;
+        this.draw();
+
+        // still allow rendering per-frame
+    }
+    tick() {
+        this.tickCount++;
+        // Update game timers using tickRate instead of frame delta
+        const tickDelta = this.tickRate / 1000; // convert ms -> seconds
+        this.updateTimers(tickDelta);
+
+        this.narratorSounds();
+
+        // Dragon updates
+        if (this.saver.get('modifiers/modifier5', false)) {
+            this.dragons.forEach(dragon => {
+                dragon.health += dragon.power * tickDelta / 10;
+                if (dragon.health > dragon.power * 10) dragon.health = dragon.power * 10;
+            });
+        }
+
+        if (this.reviveDragons) {
+            this.dragons.forEach(dragon => {
+                if (dragon.died) {
                     dragon.died = false;
-                    dragon.reset(new Vector(1920/2,1080/2));
-                }   
-            })
+                    dragon.reset(new Vector(1920 / 2, 1080 / 2));
+                }
+            });
             this.reviveDragons = false;
         }
-        if(this.keys.pressed('any') || this.mouse.pressed('any')){
-            this.musician.resume()
-        }
-        if(this.loaded===4){
-            this.loaded+=1
-        }
-        this.dragons.forEach((dragon) => {
-            dragon.update(delta);
-        })
-        this.Board.update(delta);
-        this.mouse.setMask(0);
-        this.mouse.setPower(0);
-        let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        for (let elm of sortedElements){
-            elm.update(delta);
-        }
-        let swap = true;
-        this.dragons.forEach((dragon) => {
-            if(dragon.power<5){
-                swap = false;
-            }
-        })
-        if(swap){
-            this.switchScene('desktop')
-        }
-        let allDead = true;
-        this.dragons.forEach((dragon) => {
-            if(dragon.died===false){
-                allDead = false;
-            }
-        
-        })
-        if(allDead) this.resetGame()
-        this.updateParticles(delta)
-        
-        this.Board.dmgMult = 1 + this.aiScore/10000;
 
-        let maxPower = 0;
-        let maxAnger = 0;
-        this.dragons.forEach((dragon) => {
-            if(dragon.power > maxPower) maxPower = dragon.power;
-            if(dragon.anger > maxAnger) maxAnger = dragon.anger;
-        })
-        this.dragons.forEach((dragon) => {
-            dragon.power = maxPower;
-            dragon.anger = maxAnger;
-        })
+        this.dragons.forEach(dragon => dragon.update(tickDelta));
+        this.Board.update(tickDelta);
+
+        this.updateParticles(tickDelta);
+
+        // Check for all dragons dead
+        const allDead = this.dragons.every(d => d.died);
+        if (allDead) this.resetGame();
+
+        let maxPower = 0, maxAnger = 0;
+        this.dragons.forEach(d => {
+            if (d.power > maxPower) maxPower = d.power;
+            if (d.anger > maxAnger) maxAnger = d.anger;
+        });
+        this.dragons.forEach(d => { d.power = maxPower; d.anger = maxAnger; });
+
+
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        if (localDragon) this.sendState(localDragon);
+    }
+    pause() {
+        this.paused = true;
+        if (this.Board) this.Board.paused = true;
+    }
+
+    unpause() {
+        this.paused = false;
+        if (this.Board) this.Board.paused = false;
     }
     createUI(){
         

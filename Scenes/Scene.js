@@ -1,5 +1,5 @@
 export default class Scene {
-    constructor(name, Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
+    constructor(name, Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) { // RSS: remoteStateSignal, EM: enableMultiplayer (signal)
         this.name = name;
         this.isReady = false;
         this.isPreloaded = false;
@@ -12,6 +12,9 @@ export default class Scene {
         this.loadScene = loadScene;
         this.preloadScene = preloadScene;
         this.removeScene = removeScene;
+        this.RSS = RSS; // remote state signal
+        this.EM = EM; // enable multiplayer signal
+        this.server = server; // ServerManager instance
         this.elements = new Map()
     }
 

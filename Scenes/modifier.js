@@ -6,8 +6,8 @@ import UIButton from '../js/UI/Button.js';
 import Geometry from '../js/Geometry.js';
 
 export class modifierScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('bsod', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) {
+        super('modifier', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server);
         this.loaded = 0;
         this.elements = new Map();
     }
@@ -28,6 +28,7 @@ export class modifierScene extends Scene {
         resources.set('narrator', this.narrator);
         resources.set('pause', this.elements.get('pause'));
         resources.set('settings-button', this.elements.get('settings-button'));
+        resources.set('id',this.playerId)
         return resources;
     }
 
@@ -53,9 +54,13 @@ export class modifierScene extends Scene {
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 case 'dragons': this.dragons = value; break;
+                case 'id': this.playerId = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
+
+        this.RSS.connect((state) => {this.applyRemoteState(state)});
+
     }
 
     onReady() {
@@ -71,7 +76,52 @@ export class modifierScene extends Scene {
         this.dragonsOnButton = 0
     }
 
+    sendState(localDragon){
+        if (this.server) {
+            if (!this.lastStateSend) this.lastStateSend = 0;
+            const now = performance.now();
+            if (now - this.lastStateSend > 20) {
+                const diff = {};
+
+                if (localDragon.pos.x !== this.lastSentPos?.[this.playerId]?.x ||
+                    localDragon.pos.y !== this.lastSentPos?.[this.playerId]?.y) {
+                    diff[this.playerId + 'x'] = localDragon.pos.x;
+                    diff[this.playerId + 'y'] = localDragon.pos.y;
+                    diff[this.playerId + 'd'] = Math.sign(localDragon.vlos.x);
+                    this.lastSentPos = this.lastSentPos || {};
+                    this.lastSentPos[this.playerId] = { ...localDragon.pos };
+                }
+
+                diff[this.playerId + 'scene'] = {'scene':'modifier', 'time':now};
+
+                if (Object.keys(diff).length > 0) {
+                    this.server.sendDiff(diff);
+                }
+
+                this.lastStateSend = now;
+            }
+        }
+    }
+
+    applyRemoteState = (state) => {
+        if (!state) return;
+        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+        const ghost = this.dragons.find(d => d.id === remoteId);
+        if (ghost) {
+            if (state[remoteId + 'x'] !== undefined) ghost.pos.x = state[remoteId + 'x'];
+            if (state[remoteId + 'y'] !== undefined) ghost.pos.y = state[remoteId + 'y'];
+            if (state[remoteId + 'd'] !== undefined) ghost.vlos.x = 0.0001 * state[remoteId + 'd'];
+        }
+
+        if(state[remoteId+'scene']){
+            if(state[remoteId+'scene'].scene !== 'modifier' && this.playerId!=='p1'){
+                this.switchScene(state[remoteId+'scene'].scene)
+            }
+        }
+    }
+
     update(delta) {
+        // --- Original update logic ---
         this.cooldownTimer.update(delta);
         if(!this.isReady) return;
         this.sessionTimer.update(delta);
@@ -84,6 +134,7 @@ export class modifierScene extends Scene {
         }
         this.mouse.setMask(0);
         this.mouse.setPower(0);
+
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
         for (let elm of sortedElements){
             elm.update(delta);
@@ -95,6 +146,7 @@ export class modifierScene extends Scene {
                 }
             })
         }
+
         this.dragonsOnButton = 0;
         this.dragons.forEach((dragon)=>{
             dragon.update(delta);
@@ -103,10 +155,7 @@ export class modifierScene extends Scene {
             }
             if(this.saver.get('twoPlayer')===false){
                 if (dragon && dragon.fireballs.length > 0) {
-                    // Copy arrays to avoid mutation while iterating
                     const fires = dragon.fireballs.slice();
-                    // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
-                    // but include any child buttons the pause container may hold.
                     const buttons = [];
                     for (const [key, el] of this.elements.entries()) {
                         if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
@@ -114,32 +163,19 @@ export class modifierScene extends Scene {
 
                     for (let fire of fires) {
                         for (let btn of buttons) {
-                            // btn.pos and btn.size exist on UIButton
                             if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
-                                try {
-                                    // Emit a left-press on the button so toggle behavior runs
-                                    btn.onPressed.left.emit();
-                                } catch (e) {
-                                    // Fallback: toggle trigger state
-                                    if (btn.trigger) {
-                                        btn.triggered = !btn.triggered;
-                                        btn.onTrigger.emit(btn.triggered);
-                                    }
-                                }
+                                try { btn.onPressed.left.emit(); } 
+                                catch (e) { if (btn.trigger) { btn.triggered = !btn.triggered; btn.onTrigger.emit(btn.triggered); } }
+
                                 this.deleteFireballs = true;
-                                
-                                // Destroy the fireball so it can't trigger multiple buttons
+
                                 try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
 
-                                // Provide a quick visual feedback: pulse the baseColor
                                 if (btn.baseColor) {
                                     const orig = btn.baseColor;
                                     btn.baseColor = '#FFFFFF44';
-                                    // restore after a short timeout using a minimal timer approach
                                     setTimeout(() => { btn.baseColor = orig; }, 120);
                                 }
-
-                                // Break to next fireball after a hit
                                 break;
                             }
                         }
@@ -148,11 +184,18 @@ export class modifierScene extends Scene {
             }
             if(dragon.pos.x>1850&&dragon.pos.y>1030) this.dragonsOnButton+=1;
         })
+
         if(this.dragonsOnButton >=2){
             this.switchScene('multimodifiers')
         }
 
+        // --- Multiplayer integration ---
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        if (localDragon) this.sendState(localDragon); // send local positions
+
+        
     }
+
 
     createUI(){
         const mod1 = new UIButton(this.mouse, this.keys, new Vector(97, 294), new Vector(533, 305), 1, null, '#FF000000', '#FFFFFF33', '#00000055');

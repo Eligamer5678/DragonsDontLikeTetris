@@ -12,9 +12,14 @@ import { Dragon } from '../Game logic/sprites.js';
 import Geometry from '../js/Geometry.js';
 import LoadingOverlay from '../js/UI/LoadingOverlay.js';
 
+
+
+
+
+
 export class TitleScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('title', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) {
+        super('title', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server);
         this.loaded = 0;
         this.defaultSaveData = {
             'settings':{
@@ -67,11 +72,11 @@ export class TitleScene extends Scene {
         } catch (e) {
             console.warn('Could not create loading overlay:', e);
         }
-    await this.loadImages()
-    this._loadingOverlay && this._loadingOverlay.setProgress(0.25);
-    this._loadingOverlay && this._loadingOverlay.setMessage('Loading sounds...');
-    await this.loadSounds()
-    this._loadingOverlay && this._loadingOverlay.setProgress(0.5);
+        await this.loadImages()
+        this._loadingOverlay && this._loadingOverlay.setProgress(0.25);
+        this._loadingOverlay && this._loadingOverlay.setMessage('Loading sounds...');
+        await this.loadSounds()
+        this._loadingOverlay && this._loadingOverlay.setProgress(0.5);
         if(window.Debug.getFlag('skipLoads')===false){
             await this.loadNarrator()
             await this.loadMusic()
@@ -91,6 +96,9 @@ export class TitleScene extends Scene {
         } catch (e) {
             console.warn('Conductor start failed:', e);
         }
+        this.EM.connect('2Player', (id) => {
+            this.enableTwoPlayer(id);
+        });
     }
 
     async loadImages(){
@@ -365,6 +373,7 @@ export class TitleScene extends Scene {
         resources.set('dragons',this.dragons)
         resources.set('twoPlayer',this.twoPlayer)
         resources.set('settings-button',this.elements.get('settings-button'))
+        resources.set('id',this.playerId)
         return resources; 
     }
 
@@ -384,7 +393,8 @@ export class TitleScene extends Scene {
         // --- Generalize blocks: grid align and split big ones ---
         this.genBlocks()
         this.saver.set('twoPlayer',false)
-        
+        this.playerId = null;
+        this.RSS.connect((state) => {this.applyRemoteState(state);});
     }
 
     genBlocks(){
@@ -429,6 +439,7 @@ export class TitleScene extends Scene {
                             pos: {x: x, y: y},
                             size: {x: blockW, y: blockH},
                             hp: 5,
+                            id:this.blocks.length,
                             destroyed: false,
                         });
                     }
@@ -456,6 +467,7 @@ export class TitleScene extends Scene {
         let rect = new UIRect(new Vector(680,115),new Vector(60,20),0,'#FF000000')
         this.elements.set('debug-rect',rect)
         this.createPauseMenu()
+
     }
 
     createPauseMenu(){
@@ -542,6 +554,204 @@ export class TitleScene extends Scene {
         this.elements.set('settings-button',openButton);
     }
 
+    // --- Spawn dragons with proper local/ghost ---
+    enableTwoPlayer(id) {
+        this.playerId = id;
+        const isP1 = this.playerId === 'p1';
+
+        this.twoPlayer = true;
+        this.saver.set('twoPlayer', true);
+
+        // Local dragon: controlled by this client
+        const localDragon = new Dragon(
+            this.mouse,
+            this.keys,
+            this.UIDraw,
+            isP1 ? new Vector(400, 500) : new Vector(40 + 1500, 740),
+            this.SpriteImages,
+            this.saver,
+            { 
+                which: isP1 ? 0 : 1,
+                id: this.playerId,
+                inputEnabled: true,
+                onlineGhost: false,
+                twoPlayer: true
+            }
+        );
+
+        // Remote dragon: ghost
+        const remoteDragon = new Dragon(
+            this.mouse,
+            this.keys,
+            this.UIDraw,
+            isP1 ? new Vector(40 + 1500, 740) : new Vector(400, 500),
+            this.SpriteImages,
+            this.saver,
+            { 
+                which: isP1 ? 1 : 0,
+                id: isP1 ? 'p2' : 'p1',
+                inputEnabled: false,
+                onlineGhost: true,
+                twoPlayer: true
+            }
+        );
+
+        if (isP1) remoteDragon.image = this.SpriteImages['blue-dragon'];
+        else localDragon.image = this.SpriteImages['blue-dragon'];
+
+        this.dragons = [localDragon, remoteDragon];
+    }
+
+    sendState(localDragon){
+        if (this.server) {
+            if (!this.lastStateSend) this.lastStateSend = 0;
+            const now = performance.now();
+            if (now - this.lastStateSend > 20) {
+                const diff = {};
+                this.playerId = this.playerId
+                if (localDragon.pos.x !== this.lastSentPos?.[this.playerId]?.x ||
+                    localDragon.pos.y !== this.lastSentPos?.[this.playerId]?.y) {
+                    diff[this.playerId + 'x'] = localDragon.pos.x;
+                    diff[this.playerId + 'y'] = localDragon.pos.y;
+                    diff[this.playerId + 'd'] = Math.sign(localDragon.vlos.x);
+                    this.lastSentPos = this.lastSentPos || {};
+                    this.lastSentPos[this.playerId] = { ...localDragon.pos };
+                }
+
+                // Minimal block data
+                diff[this.playerId + 'blocks'] = this.blocks.map(b => ({ id:b.id, hp:b.hp, destroyed:b.destroyed }));
+
+                diff[this.playerId + 'scene'] = {'scene':'title', 'time':now};
+
+                if (Object.keys(diff).length > 0) {
+                    this.server.sendDiff(diff);
+                }
+
+                this.lastStateSend = now;
+            }
+        }
+    }
+
+    applyRemoteState(state){
+        if (!state) return;
+        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+        const ghost = this.dragons.find(d => d.id === remoteId);
+        if (ghost) {
+            if (state[remoteId + 'x'] !== undefined) ghost.pos.x = state[remoteId + 'x'];
+            if (state[remoteId + 'y'] !== undefined) ghost.pos.y = state[remoteId + 'y'];
+            if (state[remoteId + 'd'] !== undefined) ghost.vlos.x = 0.0001 * state[remoteId + 'd'];
+        }
+
+        // --- Sync blocks with HP & destroyed state ---
+        const remoteBlocksKey = remoteId + 'blocks';
+        if (state[remoteBlocksKey] && Array.isArray(state[remoteBlocksKey])) {
+            const remoteBlocks = state[remoteBlocksKey];
+            const localBlocks = this.blocks;
+
+            const mergedBlocks = [];
+
+            // Loop over local blocks
+            localBlocks.forEach(local => {
+                const remote = remoteBlocks.find(b => b.id === local.id);
+                if (remote) {
+                    // Keep the lowest HP / destroyed state
+                    const merged = {
+                        ...local,
+                        hp: Math.min(local.hp, remote.hp),
+                        destroyed: local.destroyed || remote.destroyed
+                    };
+                    if (!merged.destroyed) mergedBlocks.push(merged);
+                }
+            });
+
+            this.blocks = mergedBlocks;
+        }
+        if(state[remoteId+'scene']){
+            if(state[remoteId+'scene'].scene !== 'title' && this.playerId!=='p1'){
+                this.switchScene(state[remoteId+'scene'].scene)
+            }
+        }
+    }
+
+    // --- Update loop (dragons + multiplayer) ---
+    update(delta) {
+        if (!this.isReady) return;
+
+        // Resume music if input detected
+        if (this.keys.pressed('any') || this.mouse.pressed('any')) this.musician.resume();
+        if (this.loaded === 4) this.loaded += 1;
+
+        this.mouse.setMask(0);
+        this.mouse.setPower(0);
+
+        const sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
+
+        // --- Update only local dragons ---
+        this.dragons.forEach(dragon => {
+            if (!dragon.onlineGhost) {
+                dragon.update(delta);
+
+                for (let elm of sortedElements) {
+                    elm.update(delta);
+                    const collision = Geometry.spriteToTile(dragon.pos.clone(), dragon.vlos.clone(), dragon.size, elm.pos, elm.size);
+                    if (collision) {
+                        dragon.pos = collision.pos;
+                        dragon.vlos = collision.vlos;
+                    }
+                }
+            }
+        });
+
+        // --- Block & fireball collisions only for local dragon ---
+        const blockCollisions = this.blocks.slice();
+        const localDragon = this.dragons.find(d => !d.onlineGhost);
+        if (localDragon) {
+            blockCollisions.forEach((block, i) => {
+                const collision = Geometry.spriteToTile(
+                    localDragon.pos.clone(),
+                    localDragon.vlos.clone(),
+                    localDragon.size,
+                    new Vector(block.pos.x, block.pos.y),
+                    new Vector(block.size.x, block.size.y)
+                );
+                if (collision) {
+                    localDragon.pos = collision.pos;
+                    localDragon.vlos = collision.vlos;
+                    localDragon.onBlock = block;
+                }
+
+                // Fireballs
+                localDragon.fireballs.forEach(fire => {
+                    const fireCollision = Geometry.spriteToTile(
+                        fire.pos.clone(),
+                        fire.vlos ? fire.vlos.clone() : new Vector(0,0),
+                        new Vector(fire.size.x, 0.1),
+                        new Vector(block.pos.x, block.pos.y),
+                        new Vector(block.size.x, block.size.y)
+                    );
+                    if (fireCollision) {
+                        block.hp -= 2;
+                        if (block.hp <= 0) block.destroyed = true;
+                    }
+                });
+            });
+        }
+        
+        // --- Remove destroyed blocks locally ---
+        this.blocks = this.blocks.filter(b => !b.destroyed);
+
+        // --- Multiplayer: throttled sendState ---
+        this.sendState(localDragon);
+
+        // --- Apply remote destroyed blocks ---
+        if (this.remoteState && this.remoteState.destroyedBlocks) {
+            this.blocks = this.blocks.filter(b => !this.remoteState.destroyedBlocks.includes(b.id));
+        }
+    }
+
+    
+
+
     draw() {
         if(!this.isReady) return;
         this.UIDraw.clear()
@@ -580,132 +790,9 @@ export class TitleScene extends Scene {
         this.drawRectTool();
     }
 
-    update(delta) {
-        if(!this.isReady) return;
-        if(this.keys.pressed('any') || this.mouse.pressed('any')){
-            this.musician.resume()
-        }
-        if(this.loaded===4){
-            
-            this.loaded+=1
-        }
-        this.mouse.setMask(0);
-        this.mouse.setPower(0);
-        let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        this.dragons.forEach((dragon)=>{
-            dragon.update(delta);
-            for (let elm of sortedElements) {
-                elm.update(delta);
-
-                let collision = Geometry.spriteToTile(dragon.pos.clone(), dragon.vlos.clone(), dragon.size, elm.pos, elm.size);
-                if (collision) {
-                    dragon.pos = collision.pos;
-                    dragon.vlos = collision.vlos;
-                }
-            }
-        })
-        // block & fireball collision
-        for (let i = 0; i < this.blocks.length; ++i) {
-            let block = this.blocks[i];
-            // Dragon standing on block
-            this.dragons.forEach((dragon)=>{
-                if (dragon) {
-                    let collision = Geometry.spriteToTile(
-                        dragon.pos.clone(),
-                        dragon.vlos.clone(),
-                        dragon.size,
-                        new Vector(block.pos.x, block.pos.y),
-                        new Vector(block.size.x, block.size.y)
-                    );
-                    if (collision) {
-                        dragon.pos = collision.pos;
-                        dragon.vlos = collision.vlos;
-                        dragon.onBlock = block;
-                    }
-                }
-                // Fireball collision
-                if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
-                    for (let fire of dragon.fireballs) {
-                        let fireCollision = Geometry.spriteToTile(
-                            fire.pos.clone(),
-                            fire.vlos ? fire.vlos.clone() : new Vector(0,0),
-                            new Vector(fire.size.x,0.1),
-                            new Vector(block.pos.x, block.pos.y),
-                            new Vector(block.size.x, block.size.y)
-                        );
-                        if (fireCollision) {
-                            block.hp -= 2;
-                            if (block.hp <= 0) {
-                                block.destroyed = true;
-                                if(i===0){
-                                    if(this.twoPlayer===false){
-                                        this.twoPlayer = true;
-                                        this.saver.set('twoPlayer',true)
-                                        this.dragons = [
-                                            new Dragon(this.mouse, this.keys, this.UIDraw, this.dragons[0].pos,this.SpriteImages,'wasd'),
-                                            new Dragon(this.mouse, this.keys, this.UIDraw, new Vector(40+1500,740),this.SpriteImages,'arrows'),
-                                        ]
-                                        this.dragons[0].which = 0;
-                                        this.dragons[1].which = 1;
-                                        this.dragons[0].twoPlayer = true;
-                                        this.dragons[1].twoPlayer = true;
-                                        this.dragons[1].image = this.SpriteImages['blue-dragon'];
-                                    }
-                                }
-                            }
-                            
-                        }
-                    }
-                }
-            })
-        }
-        // Remove destroyed blocks
-        
-        this.blocks = this.blocks.filter(b => !b.destroyed);
-        
-        // ui + fireball collision
-        if(!this.saver.get('twoPlayer',false)){
-            this.dragons.forEach((dragon)=>{
-                if (dragon && dragon.fireballs && dragon.fireballs.length > 0) {
-                    const fires = dragon.fireballs.slice();
-                    // Build a list of UIButton targets. Exclude the pause container itself (key === 'pause'),
-                    // but include any child buttons the pause container may hold, and only if visible.
-                    const buttons = [];
-                    for (const [key, el] of this.elements.entries()) {
-                        if (el && typeof el.onPressed === 'object' && el.visible !== false) buttons.push(el);
-                    }
-                    
-                    for (let fire of fires) {
-                        for (let btn of buttons) {
-                            if (Geometry.rectCollide(fire.pos.sub(fire.size.mult(0.5)), fire.size, btn.pos.add(btn.offset || {x:0,y:0}), btn.size)) {
-                                try {
-                                    btn.onPressed.left.emit();
-                                } catch (e) {
-                                    if (btn.trigger) {
-                                        btn.triggered = !btn.triggered;
-                                        btn.onTrigger.emit(btn.triggered);
-                                    }
-                                }
-                                // Destroy the fireball so it can't trigger multiple buttons
-                                try { fire.adiós(); } catch (e) { if (fire.destroy) fire.destroy.emit(fire); }
-                                
-                                // Provide a quick visual feedback: pulse the baseColor
-                                if (btn.baseColor) {
-                                    const orig = btn.baseColor;
-                                    btn.baseColor = '#FFFFFF44';
-                                    setTimeout(() => { btn.baseColor = orig; }, 120);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                }
-            })
-        }
-        
-        this.updateRectTool();
-    }
     
+
+
     createRectTool(){
         this.rects = [];
         this.drawingRects = false;

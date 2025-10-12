@@ -4,8 +4,27 @@ import Mouse from './js/Mouse.js';
 import Keys from './js/Keys.js';
 import Draw from './js/Draw.js';
 import Saver from './js/Saver.js';
+import Signal from './js/Signal.js';
 import { addEvent, getID } from './js/Support.js';
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+import { getDatabase } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
+import ServerManager from '../js/Server/ServerManager.js';
 
+import createHButton from '../js/htmlElements/createHButton.js';
+import createHDiv from '../js/htmlElements/createHDiv.js';
+import createHInput from '../js/htmlElements/createHInput.js';
+import createHLabel from '../js/htmlElements/createHLabel.js';
+
+let firebaseConfig = {
+    apiKey: "AIzaSyA1K-Y-6UUSLy3Mbs71N3Md0WWvZTX4oss",
+    authDomain: "ddlt-5804e.firebaseapp.com",
+    databaseURL: "https://ddlt-5804e-default-rtdb.firebaseio.com",
+    projectId: "ddlt-5804e",
+    storageBucket: "ddlt-5804e.firebasestorage.app",
+    messagingSenderId: "961527549137",
+    appId: "1:961527549137:web:b9f704ad1468287f5309f0",
+    measurementId: "G-G7P47F5QH0"
+};
 
 const mainWidth = 1920;
 const mainheight = 1080;
@@ -42,12 +61,22 @@ class Game {
         this.scenes = new Map();
         this.currentScene = null;
         this.sceneName = null;
+
+        // Multiplayer
+        this.remoteStateSignal = new Signal(); // Signal to apply remote state updates
+        this.enableMultiplayer = new Signal(); // Signal to enable multiplayer features
+
+        this.app = initializeApp(firebaseConfig);
+        this.db = getDatabase(this.app);
+        this.server = new ServerManager(this.db);
+
         this.init();
     }
 
     async init() {
         await this.loadScene('title');
         this.switchScene('title');
+        this.createMultiplayerUI();
     }
 
     // Loads a scene from a file if not already loaded, or if reload is true. Returns a Promise
@@ -69,6 +98,9 @@ class Game {
                 this.loadScene.bind(this),
                 this.preloadScene.bind(this),
                 this.removeScene.bind(this),
+                this.remoteStateSignal,
+                this.enableMultiplayer,
+                this.server
             );
             if (scene.onPreload) return  scene.onPreload(resources).then(() => {
                 this.scenes.set(name, scene);
@@ -108,6 +140,92 @@ class Game {
         this.currentScene = scene;
         this.sceneName = name;
     }
+
+    createMultiplayerUI() {
+        this.saver.remove('instance');
+        console.log('Creating multiplayer UI');
+
+        // --- Container panel ---
+        const panel = createHDiv(
+            new Vector(20, 20),
+            new Vector(300, 130),
+            '#00000033',
+            {
+                borderRadius: '8px',
+                border: '1px solid #FFFFFF44',
+                backdropFilter: 'blur(4px)',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-around',
+                alignItems: 'center',
+                color: '#fff',
+                padding: '8px',
+                fontFamily: 'sans-serif'
+            }
+        );
+
+        const label = createHLabel(new Vector(30, 30), new Vector(80, 30), 'Room ID:', { color:'#fff', fontSize:14, textAlign:'center' });
+        const input = createHInput(new Vector(120, 30), new Vector(200, 30), 'text', { background:'#222', color:'#fff', border:'1px solid #555', borderRadius:'4px', textAlign:'center' });
+        const statusLabel = createHLabel(new Vector(30, 140), new Vector(300,20), 'Status: Idle', { color:'#ddd', fontSize:14, textAlign:'left' });
+
+        const createBtn = createHButton(new Vector(30, 80), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+        createBtn.textContent = 'Create';
+
+        const joinBtn = createHButton(new Vector(190, 80), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+        joinBtn.textContent = 'Join';
+
+        
+
+
+        const updateStatus = (state) => {
+            if (!state) return;
+            const p1Ready = state.p1x !== undefined && state.p1y !== undefined;
+            const p2Ready = state.p2x !== undefined && state.p2y !== undefined;
+
+            if (p1Ready && p2Ready) statusLabel.textContent = 'Status: Connected!';
+            else if (p1Ready || p2Ready) statusLabel.textContent = 'Status: Waiting for other player...';
+        };
+
+        // --- Button logic ---
+        createBtn.addEventListener('click', async () => {
+            const roomId = await this.server.createRoom();
+            input.value = roomId;
+            statusLabel.textContent = 'Status: Room created! Waiting for player 2...';
+            console.log('Room created:', roomId);
+            this.enableMultiplayer.emit('p1');
+
+            // Attach signal handler for this scene instance
+            this.server.on('state', (state) => {
+                this.remoteStateSignal.emit(state,'p1'); 
+                updateStatus(state);
+            });
+        });
+
+        joinBtn.addEventListener('click', async () => {
+            const roomId = input.value.trim();
+            if (!roomId) {
+                statusLabel.textContent = 'Status: Enter room ID!';
+                return;
+            }
+
+            await this.server.joinRoom(roomId);
+            statusLabel.textContent = 'Status: Joined room. Waiting for sync...';
+            console.log('Joined room:', roomId);
+            this.enableMultiplayer.emit('p2');
+
+            const snapshot = await this.server.fetch('state');
+            if (snapshot) this.remoteStateSignal.emit(snapshot);
+
+            this.server.on('state', (state) => {
+                updateStatus(state);
+                this.remoteStateSignal.emit(state,'p2'); // emit for this scene
+            });
+        });
+
+        this.uiElements = { panel, label, input, createBtn, joinBtn, statusLabel };
+    }
+
+
 
     // Removes a scene from the map
     removeScene(name) {

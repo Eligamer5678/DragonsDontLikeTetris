@@ -1,17 +1,11 @@
-export default class Signal {
+export default class Signal { 
     constructor() {
-        // listeners: Map<name, callback>
         this.listeners = new Map();
+        this.returnCallback = null; // callback for onReturn
     }
 
-    /**
-     * Connect a listener with a name. If only a callback is provided, uses callback.name or auto-generated name.
-     * @param {string|function} nameOrCallback - Name or callback function.
-     * @param {function} [callback] - Callback function if name is provided.
-     */
     connect(nameOrCallback, callback) {
         if (typeof nameOrCallback === 'function' && callback === undefined) {
-            // Only callback provided
             const cb = nameOrCallback;
             const name = cb.name || `listener_${this.listeners.size+1}`;
             this.listeners.set(name, cb);
@@ -22,10 +16,6 @@ export default class Signal {
         }
     }
 
-    /**
-     * Disconnect a listener by name.
-     * @param {string} name - Name of the listener to remove.
-     */
     disconnect(name) {
         if (typeof name === 'string') {
             this.listeners.delete(name);
@@ -34,17 +24,59 @@ export default class Signal {
         }
     }
 
+    hasListener(name) {
+        return this.listeners.has(name);
+    }
+
+    onReturn(callback) {
+        if (typeof callback === 'function') {
+            this.returnCallback = callback;
+        } else {
+            console.warn('Signal.onReturn expects a function');
+        }
+    }
+
+    /**
+     * Emit the signal
+     * @param  {...any} args - arguments to pass to listeners
+     * @returns {Map<string, any>|undefined} map of named listener return values if last arg is 'callback=true'
+     */
     emit(...args) {
-        for (const callback of this.listeners.values()) {
+        let collect = false;
+
+        // Check if last argument is 'callback=true'
+        const lastArg = args[args.length - 1];
+        if (typeof lastArg === 'string' && lastArg.toLowerCase() === 'callback=true') {
+            collect = true;
+            args.pop();
+        }
+
+        const returnValues = collect ? new Map() : undefined;
+
+        for (const [name, callback] of this.listeners.entries()) {
             try {
-                callback(...args);
+                const result = callback(...args);
+
+                // Call onReturn if result is truthy
+                if (result && this.returnCallback) {
+                    this.returnCallback(result);
+                }
+
+                // Collect only named listeners (ignore auto-generated)
+                if (collect && !name.startsWith('listener_')) {
+                    returnValues.set(name, result);
+                }
+
             } catch (e) {
                 console.error('Signal callback error:', e);
             }
         }
+
+        if (collect) return returnValues;
     }
 
     clear() {
         this.listeners.clear();
+        this.returnCallback = null;
     }
 }

@@ -1,4 +1,18 @@
 export default class Vector {
+    // Compare this vector to another for equality
+    equals(v) {
+        return v && this.x === v.x && this.y === v.y;
+    }
+    // Encode a Vector to a simple array [x, y]
+    static encode(v) {
+        return [v.x, v.y];
+    }
+
+    // Decode an array [x, y] to a Vector
+    static decode(arr) {
+        if (!Array.isArray(arr) || arr.length < 2) return new Vector(0, 0);
+        return new Vector(arr[0], arr[1]);
+    }
     // Linearly interpolate between this and another vector
     lerp(v, t) {
         return new Vector(
@@ -10,6 +24,12 @@ export default class Vector {
         this.x = x;
         this.y = y;
     }
+
+    encode() {
+        return [this.x, this.y];
+    }
+
+    // Decode an array [x, y] to a Vector
 
     // ----- Immutable versions (return new vectors) -----
     clone() { return new Vector(this.x, this.y); }

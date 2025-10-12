@@ -22,6 +22,24 @@ export default class Timer {
         this.onFinish = new Signal();
         this.onTick = new Signal();
         this.onLoop = new Signal();
+        this.onPause = new Signal();
+        this.onUnpause = new Signal();
+    }
+
+    pause() {
+        if (this.running) {
+            this.running = false;
+            this.onPause.emit(this.time);
+            // Keep _lastUpdate so we can resume accurately
+        }
+    }
+
+    unpause() {
+        if (!this.running) {
+            this.running = true;
+            this._lastUpdate = performance.now();
+            this.onUnpause.emit(this.time);
+        }
     }
 
     start() {
