@@ -28,7 +28,7 @@ export class GameScene extends Scene {
             const now = performance.now();
             if (now - this.lastStateSend >= this.tickRate) {
                 const diff = {};
-                
+
                 // Send positions
                 if (localDragon.pos.x !== this.lastSentPos?.[this.playerId]?.x ||
                     localDragon.pos.y !== this.lastSentPos?.[this.playerId]?.y) {
@@ -38,6 +38,10 @@ export class GameScene extends Scene {
                     this.lastSentPos = this.lastSentPos || {};
                     this.lastSentPos[this.playerId] = { ...localDragon.pos };
                 }
+
+                // Sync power and health
+                diff[this.playerId + 'power'] = localDragon.power;
+                diff[this.playerId + 'health'] = localDragon.health;
 
                 // Send current board
                 const encodedBoard = BoardSerializer.encode(this.Board.board);
@@ -63,18 +67,39 @@ export class GameScene extends Scene {
         if (!state) return;
         const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
         const ghost = this.dragons.find(d => d.id === remoteId);
+        // Also sync local dragon's power/health with remote if remote is higher
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
         if (ghost) {
             if (state[remoteId + 'x'] !== undefined) ghost.pos.x = state[remoteId + 'x'];
             if (state[remoteId + 'y'] !== undefined) ghost.pos.y = state[remoteId + 'y'];
             if (state[remoteId + 'd'] !== undefined) ghost.vlos.x = 0.0001 * state[remoteId + 'd'];
         }
-        this.applyTick(remoteId,state);
+
+        // Sync power: both dragons always have the same, take the highest
+        let remotePower = state[remoteId + 'power'];
+        let localPower = state[this.playerId + 'power'];
+        if (ghost && localDragon) {
+            let maxPower = Math.max(
+                ghost.power,
+                localDragon.power,
+                remotePower !== undefined ? remotePower : -Infinity,
+                localPower !== undefined ? localPower : -Infinity
+            );
+            ghost.power = maxPower;
+            localDragon.power = maxPower;
+        }
+
+        // Sync health: each dragon takes the higher of local/remote
+        if (ghost && state[remoteId + 'health'] !== undefined) {
+            ghost.health = state[remoteId + 'health'];
+        }
+
+        this.applyTick(remoteId, state);
         this.applyBoard(remoteId, state);
 
-        
-        if(state[remoteId+'scene']){
-            if(state[remoteId+'scene'].scene !== 'game' && this.playerId!=='p1'){
-                this.switchScene(state[remoteId+'scene'].scene)
+        if (state[remoteId + 'scene']) {
+            if (state[remoteId + 'scene'].scene !== 'game' && this.playerId !== 'p1') {
+                this.switchScene(state[remoteId + 'scene'].scene);
             }
         }
     }
@@ -129,10 +154,6 @@ export class GameScene extends Scene {
         
     }
 
-
-
-
-
     resetGame(){
         this.dragons.forEach((dragon)=>{
             dragon.died = false;
@@ -167,9 +188,12 @@ export class GameScene extends Scene {
         window.Debug.createSignal('slow',()=>{
             if(this.SPEED === true){
                 this.fallTimer.onLoop.disconnect('fall1');
-                this.fallTimer.onLoop.disconnect('fall2');
-                this.fallTimer.onLoop.disconnect('fall3');
-                this.AITimer.onLoop.disconnect('ai1');
+            if (state[remoteId + 'health'] !== undefined) {
+                this.remoteHealth = Math.max(this.remoteHealth ?? ghost?.health ?? 0, state[remoteId + 'health']);
+            }
+            // Re-search for remote dragon instance after health update
+            const updatedGhost = this.dragons.find(d => d.id === remoteId);
+            if (updatedGhost) updatedGhost.health = this.remoteHealth ?? updatedGhost.health;
                 this.AITimer.onLoop.disconnect('ai2');
                 this.AITimer.onLoop.disconnect('ai3');
             }
@@ -549,6 +573,12 @@ export class GameScene extends Scene {
 
         const localDragon = this.dragons.find(d => d.id === this.playerId);
         if (localDragon) this.sendState(localDragon);
+
+        this.dragons.forEach((dragon)=>{
+            if(dragon.power>=5){
+                this.switchScene('desktop')
+            }
+        })
     }
     pause() {
         this.paused = true;
@@ -576,6 +606,11 @@ export class GameScene extends Scene {
         if(this.lineMessages.length>15){
             this.lineMessages.shift();
         }
+        // Get dragon instances by id for multiplayer safety
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+        const remoteDragon = this.dragons.find(d => d.id === remoteId);
+
         if(!((this.frameCount-21)%20)){
             this.UIDraw.rect(new Vector(0,0),new Vector(708,1080),null,true,0,true);
             if(this.dragons.length<2){
@@ -585,8 +620,6 @@ export class GameScene extends Scene {
             }
             this.UIDraw.text(`Score: ${Math.round(this.aiScore)}`,new Vector(80,300),"#999999ff",1,55,{'align':'start'})
             this.UIDraw.text(`Increasing damage taken by: ${Math.round(this.aiScore/100)}%`,new Vector(120,330),"#791a1aff",1,25,{'align':'start','italics' :true})
-            
-            
             for(let l = 0; l<this.lineMessages.length; l++){
                 this.UIDraw.text(this.lineMessages[l],new Vector(80,440+l*40),"#999999ff",1,35,{'align':'start'})
             }
@@ -599,32 +632,37 @@ export class GameScene extends Scene {
             }else{
                 this.UIDraw.image(this.BackgroundImages['coop-ui1'],new Vector(1233,0),new Vector(697,1080))
             }
-            this.UIDraw.rect(new Vector(1261,62),new Vector((this.dragons[0].power % 1)*436,117),'#ff000033')
-            if((this.dragons[0].power % 1)*436 > 4.5){
-                this.UIDraw.rect(new Vector(1265,179),new Vector(Math.min((this.dragons[0].power % 1)*436-4.5,427),6),'#ff000033') //diff 9
-                this.UIDraw.rect(new Vector(1265,56),new Vector(Math.min((this.dragons[0].power % 1)*436-4.5,427),6),'#ff000033')
+            if(localDragon){
+                this.UIDraw.rect(new Vector(1261,62),new Vector((localDragon.power % 1)*436,117),'#ff000033')
+                if((localDragon.power % 1)*436 > 4.5){
+                    this.UIDraw.rect(new Vector(1265,179),new Vector(Math.min((localDragon.power % 1)*436-4.5,427),6),'#ff000033') //diff 9
+                    this.UIDraw.rect(new Vector(1265,56),new Vector(Math.min((localDragon.power % 1)*436-4.5,427),6),'#ff000033')
+                }
+                this.UIDraw.text(`Power: ${Math.round((localDragon.power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
+                this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1290,290),"#ff0000ff",1,45,{'align':'start'})
+                this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1290,340),this.settings.colors.blocks,1,45,{'align':'start'})
+                this.UIDraw.text(`Board resets: ${Math.round(this.resets)}`,new Vector(1290,390),"#FFFFFF55",1,45,{'align':'start'})
             }
-
-            this.UIDraw.text(`Power: ${Math.round((this.dragons[0].power)*100)/100}`,new Vector(1470,140),"#FF0000",1,55,{'align':'center'})
-            this.UIDraw.text(`Deaths: ${Math.round(this.deaths)}`,new Vector(1290,290),"#ff0000ff",1,45,{'align':'start'})
-            this.UIDraw.text(`Blocks: ${Math.round(this.sessionBlocks)}`,new Vector(1290,340),this.settings.colors.blocks,1,45,{'align':'start'})
-            this.UIDraw.text(`Board resets: ${Math.round(this.resets)}`,new Vector(1290,390),"#FFFFFF55",1,45,{'align':'start'})
         }
-        if(this.dragons.length!==2){
+        if(this.dragons.length!==2 && localDragon){
             this.UIDraw.rect(new Vector(135,78),new Vector(100*5.18,34),'#000000')
             this.UIDraw.rect(new Vector(153,135),new Vector(1*499,32),'#000000')
-            this.UIDraw.rect(new Vector(135,78),new Vector(this.dragons[0].health*5.18,34),'#FF0000')
-            this.UIDraw.rect(new Vector(153,135),new Vector(Math.min(this.dragons[0].anger,1)*499,32),'rgba(62, 173, 31, 1)')
+            this.UIDraw.rect(new Vector(135,78),new Vector(localDragon.health*5.18,34),'#FF0000')
+            this.UIDraw.rect(new Vector(153,135),new Vector(Math.min(localDragon.anger,1)*499,32),'rgba(62, 173, 31, 1)')
         }
-        if(this.dragons.length===2){
-            this.UIDraw.rect(new Vector(125,80),new Vector(100*2.15,32),'#000000')
-            this.UIDraw.rect(new Vector(125,80),new Vector(this.dragons[0].health*2.15*2,32),'#FF0000')
-            
-            this.UIDraw.rect(new Vector(605,80),new Vector(-100*2.1,32),'#000000')
-            this.UIDraw.rect(new Vector(605,80),new Vector(-this.dragons[1].health*2.1*2,32),'#005effff')
-
-            this.UIDraw.rect(new Vector(73,135),new Vector(1*580,32),'#000000')
-            this.UIDraw.rect(new Vector(73,135),new Vector(Math.min(this.dragons[0].anger,1)*580,32),'rgba(148, 28, 138, 1)')
+        if(this.dragons.length===2 && localDragon && remoteDragon){
+            // Always show p1 (host) health as red, p2 (remote) as blue
+            const p1Dragon = this.dragons.find(d => d.id === 'p1');
+            const p2Dragon = this.dragons.find(d => d.id === 'p2');
+            // Left health bar (red, p1)
+            this.UIDraw.rect(new Vector(125,80),new Vector(100*2.15,32),'#000000');
+            this.UIDraw.rect(new Vector(125,80),new Vector((p1Dragon ? p1Dragon.health : 0)*2.15*2,32),'#FF0000');
+            // Right health bar (blue, p2)
+            this.UIDraw.rect(new Vector(605,80),new Vector(-100*2.1,32),'#000000');
+            this.UIDraw.rect(new Vector(605,80),new Vector(-(p2Dragon ? p2Dragon.health : 0)*2.1*2,32),'#005effff');
+            // Anger bar (use localDragon's anger)
+            this.UIDraw.rect(new Vector(73,135),new Vector(1*580,32),'#000000');
+            this.UIDraw.rect(new Vector(73,135),new Vector(Math.min(localDragon.anger,1)*580,32),'rgba(148, 28, 138, 1)');
         }
         this.UIDraw.useCtx('overlays')
         this.UIDraw.clear()
@@ -636,8 +674,5 @@ export class GameScene extends Scene {
             dragon.draw();
         })
         this.UIDraw.useCtx('UI')
-
-        
-
     }
 } 

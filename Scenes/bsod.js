@@ -5,10 +5,11 @@ import Timer from '../js/Timer.js';
 import UIButton from '../js/UI/Button.js';
 
 export class BSODScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('bsod', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+    constructor(...args) {
+        super('bsod', ...args);
         this.loaded = 0;
         this.elements = new Map();
+        this.tickRate = 42;
     }
 
     async onPreload(resources=null) {}
@@ -16,6 +17,13 @@ export class BSODScene extends Scene {
     onSwitchTo() {
         this.Draw.clear();
         this.UIDraw.clear();
+        return this.packResources();
+    }
+
+    packResources() {
+        this.dragons.forEach((dragon) => {
+            dragon.reset()
+        })
         let resources = new Map();
         resources.set('settings', this.settings);
         resources.set('backgrounds', this.BackgroundImages);
@@ -26,17 +34,19 @@ export class BSODScene extends Scene {
         resources.set('narrator', this.narrator);
         resources.set('pause', this.elements.get('pause'));
         resources.set('settings-button', this.elements.get('settings-button'));
+        resources.set('dragons', this.dragons);
+        resources.set('id', this.playerId);
         return resources;
     }
 
-    onSwitchFrom(resources) {
+    unpackResources(resources) {
         if (!resources) {
-            console.error('No resources...');
-            return;
+            console.log('No resources...');
+            return false;
         }
         if (!(resources instanceof Map)) {
             console.error('Invalid resources type');
-            return;
+            return false;
         }
         for (const [key, value] of resources.entries()) {
             switch (key) {
@@ -47,11 +57,20 @@ export class BSODScene extends Scene {
                 case 'musician': this.musician = value; break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
+                case 'dragons': this.dragons = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
-                case 'dragon': this.dragon = value; break;
-                default: console.warn(`Unknown resource key: ${key}`); log = false;
+                case 'id': this.playerId = value; break;
+                default: console.warn(`Unknown resource key: ${key}`);
             }
+        }
+        return true;
+    }
+
+    onSwitchFrom(resources) {
+        if (!this.unpackResources(resources)) return false;
+        if (this.RSS) {
+            this.RSS.connect((state) => { this.applyRemoteState(state); });
         }
     }
 
@@ -61,6 +80,8 @@ export class BSODScene extends Scene {
         this.sessionTimer = new Timer('stopwatch');
         this.sessionTimer.start();
         this.frameCount = 0;
+        // Multiplayer sync
+        if (this.dragon) this.sendState(this.dragon);
     }
 
     update(delta) {
@@ -78,6 +99,68 @@ export class BSODScene extends Scene {
         let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
         for (let elm of sortedElements){
             elm.update(delta);
+        }
+        // Multiplayer integration
+        if (this.dragon) this.sendState(this.dragon);
+    }
+    // Multiplayer sync: sendState and applyRemoteState
+    sendState(localDragon) {
+        if (this.server) {
+            if (!this.lastStateSend) this.lastStateSend = 0;
+            const now = performance.now();
+            if (now - this.lastStateSend >= this.tickRate) {
+                const diff = {};
+                // Position
+                if (localDragon?.pos) {
+                    diff[this.playerId + 'x'] = localDragon.pos.x;
+                    diff[this.playerId + 'y'] = localDragon.pos.y;
+                }
+                // Power and health
+                diff[this.playerId + 'power'] = localDragon?.power;
+                diff[this.playerId + 'health'] = localDragon?.health;
+                // Scene info
+                diff[this.playerId + 'scene'] = { scene: 'bsod', time: now };
+                if (Object.keys(diff).length > 0) {
+                    this.server.sendDiff(diff);
+                }
+                this.lastStateSend = now;
+            }
+        }
+    }
+
+    applyRemoteState(state) {
+        if (!state) return;
+        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+        const ghost = this.dragon && this.dragon.id === remoteId ? this.dragon : null;
+        const localDragon = this.dragon && this.dragon.id === this.playerId ? this.dragon : null;
+        if (ghost) {
+            if (state[remoteId + 'x'] !== undefined) ghost.pos.x = state[remoteId + 'x'];
+            if (state[remoteId + 'y'] !== undefined) ghost.pos.y = state[remoteId + 'y'];
+        }
+        // Sync power: both dragons always have the same, take the highest
+        let remotePower = state[remoteId + 'power'];
+        let localPower = state[this.playerId + 'power'];
+        if (ghost && localDragon) {
+            let maxPower = Math.max(
+                ghost.power,
+                localDragon.power,
+                remotePower !== undefined ? remotePower : -Infinity,
+                localPower !== undefined ? localPower : -Infinity
+            );
+            ghost.power = maxPower;
+            localDragon.power = maxPower;
+        }
+        // Sync health: each dragon takes the higher of local/remote
+        if (ghost && state[remoteId + 'health'] !== undefined) {
+            ghost.health = Math.max(ghost.health, state[remoteId + 'health']);
+        }
+        if (localDragon && state[this.playerId + 'health'] !== undefined) {
+            localDragon.health = Math.max(localDragon.health, state[this.playerId + 'health']);
+        }
+        if (state[remoteId + 'scene']) {
+            if (state[remoteId + 'scene'].scene !== 'bsod' && this.playerId !== 'p1') {
+                this.switchScene(state[remoteId + 'scene'].scene);
+            }
         }
     }
 
