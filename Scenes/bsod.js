@@ -20,10 +20,14 @@ export class BSODScene extends Scene {
         return this.packResources();
     }
 
+    onSwitchFrom(resources) {
+        if (!this.unpackResources(resources)) return false;
+        if (this.RSS) {
+            this.RSS.connect((state) => { this.applyRemoteState(state); });
+        }
+    }
+
     packResources() {
-        this.dragons.forEach((dragon) => {
-            dragon.reset()
-        })
         let resources = new Map();
         resources.set('settings', this.settings);
         resources.set('backgrounds', this.BackgroundImages);
@@ -61,6 +65,7 @@ export class BSODScene extends Scene {
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 case 'dragons': this.dragons = value; break;
+                case 'id': this.playerId = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
@@ -170,7 +175,11 @@ export class BSODScene extends Scene {
         if(!this.isReady) return;
         if(!((this.frameCount)%2)){  
             this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
-            this.Draw.image(this.BackgroundImages['BSOD'],Vector.zero(),new Vector(1920,1080));
+            try {
+                this.Draw.image(this.BackgroundImages['bsod'],Vector.zero(),new Vector(1920,1080));
+            }catch(e){
+                console.error('Error drawing background image:', e);
+            }
         }
         let sortedElements = [...this.elements.values()].sort((a, b) => a.layer - b.layer);
         for (const elm of sortedElements) {

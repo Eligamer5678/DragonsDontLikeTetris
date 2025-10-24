@@ -54,7 +54,6 @@ export class modifierScene extends Scene {
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 case 'dragons': this.dragons = value; break;
-                case 'id': this.playerId = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
