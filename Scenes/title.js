@@ -12,14 +12,9 @@ import { Dragon } from '../Game logic/sprites.js';
 import Geometry from '../js/Geometry.js';
 import LoadingOverlay from '../js/UI/LoadingOverlay.js';
 
-
-
-
-
-
 export class TitleScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) {
-        super('title', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server);
+    constructor(...args) {
+        super('title', ...args);
         this.loaded = 0;
         this.defaultSaveData = {
             'settings':{
@@ -478,8 +473,9 @@ export class TitleScene extends Scene {
 
         let closeButton = new UIButton(this.mouse, this.keys, new Vector(1725,50),new Vector(145,135),3,'Escape','#00000000','#FFFFFF33','#00000055');
         closeButton.onPressed.left.connect(()=>{this.pauseMenu.visible = false;})
-        let openButton = new UIButton(this.mouse, this.keys, new Vector(1725,50),new Vector(145,135),1,'Escape','#00000000','#FFFFFF33','#00000055');
-        openButton.onPressed.left.connect(()=>{this.pauseMenu.visible = true;});
+        this.openButton = new UIButton(this.mouse, this.keys, new Vector(1725,50),new Vector(145,135),1,'Escape','#00000000','#FFFFFF33','#00000055');
+        this.openButton.onPressed.left.connect(()=>{this.pauseMenu.visible = true;});
+        
         this.pauseMenu.addElement('closeButton',closeButton);
 
         
@@ -551,7 +547,7 @@ export class TitleScene extends Scene {
         this.pauseMenu.addElement('exitButton',exitButton)
 
         this.elements.set('pauseMenu',this.pauseMenu);
-        this.elements.set('settings-button',openButton);
+        this.elements.set('settings-button',this.openButton);
     }
 
     // --- Spawn dragons with proper local/ghost ---
@@ -704,7 +700,12 @@ export class TitleScene extends Scene {
 
         // --- Block & fireball collisions only for local dragon ---
         const blockCollisions = this.blocks.slice();
-        const localDragon = this.dragons.find(d => !d.onlineGhost);
+        let localDragon;
+        if (this.playerCount > 1) {
+            localDragon = this.dragons.find(d => !d.onlineGhost);
+        } else {
+            localDragon = this.dragons[0];
+        }
         if (localDragon) {
             blockCollisions.forEach((block, i) => {
                 const collision = Geometry.spriteToTile(
@@ -741,6 +742,7 @@ export class TitleScene extends Scene {
         this.blocks = this.blocks.filter(b => !b.destroyed);
 
         // --- Multiplayer: throttled sendState ---
+        if(this.playerCount < 1) return;
         this.sendState(localDragon);
 
         // --- Apply remote destroyed blocks ---
@@ -748,9 +750,6 @@ export class TitleScene extends Scene {
             this.blocks = this.blocks.filter(b => !this.remoteState.destroyedBlocks.includes(b.id));
         }
     }
-
-    
-
 
     draw() {
         if(!this.isReady) return;
@@ -998,7 +997,6 @@ export class TitleScene extends Scene {
             this.mode = 'select';
         }
     }
-
     drawRectTool(){
         this.UIDraw.useCtx('overlays');
         // Draw existing rectangles

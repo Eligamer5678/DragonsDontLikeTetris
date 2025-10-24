@@ -65,7 +65,9 @@ class Game {
         // Multiplayer
         this.remoteStateSignal = new Signal(); // Signal to apply remote state updates
         this.enableMultiplayer = new Signal(); // Signal to enable multiplayer features
+        this.playerCount = 1; // Number of players in the current session
 
+        // Firebase setup
         this.app = initializeApp(firebaseConfig);
         this.db = getDatabase(this.app);
         this.server = new ServerManager(this.db);
@@ -100,7 +102,8 @@ class Game {
                 this.removeScene.bind(this),
                 this.remoteStateSignal,
                 this.enableMultiplayer,
-                this.server
+                this.server,
+                this.playerCount
             );
             if (scene.onPreload) return  scene.onPreload(resources).then(() => {
                 this.scenes.set(name, scene);
@@ -145,10 +148,14 @@ class Game {
         this.saver.remove('instance');
         console.log('Creating multiplayer UI');
 
-        // --- Container panel ---
+        // --- Container panel (bottom-right) ---
+        const panelSize = new Vector(300, 130);
+        const margin = 20; // margin from screen edge
+        // Position relative to a 1920x1080 logical canvas: bottom-right origin
+        const panelPos = new Vector(1920 - margin - panelSize.x, 1080 - margin - panelSize.y);
         const panel = createHDiv(
-            new Vector(20, 20),
-            new Vector(300, 130),
+            panelPos,
+            panelSize,
             '#00000033',
             {
                 borderRadius: '8px',
@@ -164,18 +171,16 @@ class Game {
             }
         );
 
-        const label = createHLabel(new Vector(30, 30), new Vector(80, 30), 'Room ID:', { color:'#fff', fontSize:14, textAlign:'center' });
-        const input = createHInput(new Vector(120, 30), new Vector(200, 30), 'text', { background:'#222', color:'#fff', border:'1px solid #555', borderRadius:'4px', textAlign:'center' });
-        const statusLabel = createHLabel(new Vector(30, 140), new Vector(300,20), 'Status: Idle', { color:'#ddd', fontSize:14, textAlign:'left' });
+        // Child elements keep the same offsets relative to the panel's top-left
+        const label = createHLabel(new Vector(panelPos.x + 10, panelPos.y + 10), new Vector(80, 30), 'Room ID:', { color:'#fff', fontSize:14, textAlign:'center' });
+        const input = createHInput(new Vector(panelPos.x + 100, panelPos.y + 10), new Vector(200, 30), 'text', { background:'#222', color:'#fff', border:'1px solid #555', borderRadius:'4px', textAlign:'center' });
+        const statusLabel = createHLabel(new Vector(panelPos.x + 10, panelPos.y + 120), new Vector(300,20), 'Status: Idle', { color:'#ddd', fontSize:14, textAlign:'left' });
 
-        const createBtn = createHButton(new Vector(30, 80), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
-        createBtn.textContent = 'Create';
+        const createBtn = createHButton(new Vector(panelPos.x + 10, panelPos.y + 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+            createBtn.textContent = 'Create';
 
-        const joinBtn = createHButton(new Vector(190, 80), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+        const joinBtn = createHButton(new Vector(panelPos.x + 170, panelPos.y + 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
         joinBtn.textContent = 'Join';
-
-        
-
 
         const updateStatus = (state) => {
             if (!state) return;
@@ -197,6 +202,7 @@ class Game {
             // Attach signal handler for this scene instance
             this.server.on('state', (state) => {
                 this.remoteStateSignal.emit(state,'p1'); 
+                this.playerCount = 2;
                 updateStatus(state);
             });
         });
@@ -218,6 +224,7 @@ class Game {
 
             this.server.on('state', (state) => {
                 updateStatus(state);
+                this.playerCount = 2;
                 this.remoteStateSignal.emit(state,'p2'); // emit for this scene
             });
         });

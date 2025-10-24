@@ -128,11 +128,6 @@ export class GameScene extends Scene {
         // prevBoard becomes the current board
         
     }
-
-
-
-
-
     resetGame(){
         this.dragons.forEach((dragon)=>{
             dragon.died = false;
@@ -271,9 +266,9 @@ export class GameScene extends Scene {
     setMods(){
         this.dragons.forEach((dragon) => {
             if(this.saver.get('modifiers/modifier1', false)===true){
-                dragon.fireballTimer = 10;
+                dragon.fireballTimer = 0.2;
             }else{
-                dragon.fireballTimer = 6;
+                dragon.fireballTimer = 0.1;
             }
             if(this.saver.get('modifiers/modifier2', false)===true){
                 dragon.big = true;
@@ -351,6 +346,7 @@ export class GameScene extends Scene {
     }
     createBoard(){
         this.Board = new Board(this.Draw,this.dragons);
+        this.Board.playerCount = this.playerCount
         this.Board.onPlace.connect(()=>this.soundGuy.play('place'))
         this.Board.onLineclear.connect((lines)=>{
             this.soundGuy.play('lineclear');
@@ -493,6 +489,13 @@ export class GameScene extends Scene {
         if (!this.isReady) return;
 
         this.tickAccumulator += delta * 1000; // convert to ms
+        // Reset mouse mask each frame so UI can re-evaluate which element should own input
+        this.mouse.setMask(0);
+        // Update elements from highest layer to lowest so top-most UI receives input first
+        let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
+        for (const elm of sortedElements) {
+            elm.update(delta);
+        }
         while (this.tickAccumulator >= this.tickRate) {
             if(!this.paused){
                 this.tick();
@@ -500,8 +503,6 @@ export class GameScene extends Scene {
             this.tickAccumulator -= this.tickRate;
         }
         this.frameCount+=1;
-        this.draw();
-
         // still allow rendering per-frame
     }
     tick() {
@@ -546,9 +547,11 @@ export class GameScene extends Scene {
         });
         this.dragons.forEach(d => { d.power = maxPower; d.anger = maxAnger; });
 
-
-        const localDragon = this.dragons.find(d => d.id === this.playerId);
-        if (localDragon) this.sendState(localDragon);
+        if(this.playerCount > 1){
+            const localDragon = this.dragons.find(d => d.id === this.playerId);
+            if (localDragon) this.sendState(localDragon);
+        }
+        
     }
     pause() {
         this.paused = true;

@@ -6,8 +6,8 @@ import UIButton from '../js/UI/Button.js';
 import Geometry from '../js/Geometry.js';
 
 export class multimodifierScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) {
-        super('multimodifiers', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server);
+    constructor(...args) {
+        super('multimodifiers', ...args);
         this.loaded = 0;
         this.elements = new Map();
     }

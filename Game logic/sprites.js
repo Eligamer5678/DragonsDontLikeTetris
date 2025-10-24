@@ -48,7 +48,7 @@ export class Dragon {
         this.big = false;
         this.heavy = false;
 
-        this.fireballTimer = 6;
+        this.fireballTimer = 0.1;
         this.prevKey = '';
         this.lockHp = true;
         this.spin = 0;
@@ -92,30 +92,32 @@ export class Dragon {
         if (this.big) this.size = this.size.mult(2);
 
         // Gravity
+        // original code used small per-frame constants; convert to per-second by scaling by ~60
         if (applyGravity && !this.keys.held('Shift')) {
-            this.vlos.y += 10 * delta * Math.max(Math.min(this.power, 5), 1);
+            this.vlos.y += 1 * 24 * delta * Math.max(Math.min(this.power, 5), 1);
         }
 
-        // Apply velocity
-        this.pos.addS(this.vlos);
+        // Apply velocity (vlos is pixels per second)
+        this.pos.addS(this.vlos.mult(delta).multS(24));
 
         // World bounds
         this.pos.x = Math.max(0, Math.min(this.pos.x, 1920 - this.size.x));
         this.pos.y = Math.max(0, Math.min(this.pos.y, 1080 - this.size.y));
         if (this.pos.y >= 1080 - this.size.y) this.vlos.y = 0;
 
-        // Player input movement (only if allowed)
-        if (canMove) this.handleInput();
+        // Player input movement (only if allowed) - pass delta so input is time-correct
+        if (canMove) this.handleInput(delta);
 
-        // Fireball shooting
-        if (canMove || this.twoPlayer) {
-            if (this.keys.held(" ", true) || this.twoPlayer) this.fireTime++;
-            else this.fireTime = 0;
-
-            if (this.fireTime % this.fireballTimer === 1 && (this.keys.held(" ") || this.twoPlayer)) {
+        
+        if(canMove && this.keys.held(" ", true)){
+            this.fireTime += delta;
+            console.log(this.fireTime);
+            if(this.fireTime>=this.fireballTimer){
                 this.shootFireballs();
+                this.fireTime = 0;
             }
         }
+
 
         this.useAbility(delta);
 
@@ -124,8 +126,11 @@ export class Dragon {
         if (this.lockHp) this.health = Math.min(this.health, 100);
         else this.health = Math.min(this.health, 320);
 
-        this.vlos.x *= this.heavy ? 0.64 : 0.8;
-        if (this.heavy) this.vlos.y += 3;
+        // Damping: convert per-frame damping factor to time-correct exponential decay
+        const perFrameDamping = this.heavy ? 0.64 : 0.8; // per-frame multiplier
+        // Apply damping over delta seconds
+        this.vlos.x *= Math.pow(perFrameDamping, 24 * delta);
+        if (this.heavy) this.vlos.y += 3 * 24 * delta; // convert small per-frame bump to per-second
 
         if (this.health <= 0) {
             this.died = true;
@@ -138,32 +143,36 @@ export class Dragon {
         }
     }
 
-    handleInput() {
+    handleInput(delta) {
         if (!this.inputEnabled) return; // ignore ghosts
 
         const speed = 2 * Math.max(Math.min(this.power, 5), 1);
 
         // Horizontal movement
         if (this.keys.held('ArrowRight') || this.keys.held('d') || this.keys.held('D')) {
-            this.vlos.x += speed;
+                // original speed was per-frame; convert to per-second (approx *60)
+                this.vlos.x += speed * 24 * delta;
             this.prevKey = 'r';
         }
         if (this.keys.held('ArrowLeft') || this.keys.held('a') || this.keys.held('A')) {
-            this.vlos.x -= speed;
+                this.vlos.x -= speed * 24 * delta;
             this.prevKey = 'l';
         }
 
         // Vertical movement - jump / fly
-        if (this.keys.pressed('ArrowUp') || this.keys.pressed('w')) {
-            this.vlos.y = -6 * Math.max(Math.min(this.power, 5), 1)
-                        - Math.abs(Math.min(Math.max(this.vlos.y, 10), 20)) / 10 * Math.max(Math.min(this.power, 5), 1);
-        } else if (this.keys.held('ArrowUp', true) > 0.2 || this.keys.held('w', true) > 0.2) {
-            this.vlos.y = -6 * Math.max(Math.min(this.power, 5), 1);
-        }
+            // Convert jump magnitudes from per-frame to per-second by scaling by 60
+            const jumpBase = 10 * Math.max(Math.min(this.power, 5), 1);
+            if (this.keys.pressed('ArrowUp') || this.keys.pressed('w')) {
+                // apply a strong impulse (set velocity)
+                this.vlos.y = (-jumpBase - Math.abs(Math.min(Math.max(this.vlos.y, 10), 20)) / 10 * Math.max(Math.min(this.power, 5), 1) );
+            } else if (this.keys.held('ArrowUp', true) > 0.2 || this.keys.held('w', true) > 0.2) {
+                this.vlos.y = -jumpBase*24*delta;
+            }
 
-        if (this.keys.held('ArrowDown') || this.keys.held('s')) {
-            this.vlos.y += 20 * 1.2 * (1/10); // tweak as needed
-        }
+            if (this.keys.held('ArrowDown') || this.keys.held('s')) {
+                // small per-frame addition converted to per-second
+                this.vlos.y += 20 * 1.2 * (1/10) * 24 * delta; // tweak as needed
+            }
     }
 
 

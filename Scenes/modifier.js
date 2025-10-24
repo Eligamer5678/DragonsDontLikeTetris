@@ -6,8 +6,8 @@ import UIButton from '../js/UI/Button.js';
 import Geometry from '../js/Geometry.js';
 
 export class modifierScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server) {
-        super('modifier', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene, RSS, EM, server);
+    constructor(Draw, ...args) {
+        super('modifier', Draw, ...args);
         this.loaded = 0;
         this.elements = new Map();
     }

@@ -35,6 +35,8 @@ export default class Board {
         this.onSync = new Signal();
         this.glitchColor = new Color(0.9,1,1);
         this.paused = false;
+
+        this.playerCount = 1;
     }
 
     reset(){
@@ -199,6 +201,10 @@ export default class Board {
                 this.setTile(part,0)
             } 
             this.canlock = true;
+            if(this.playerCount === 1){
+                this.lockTetromino();
+                this.clearLines();
+            }
         }
     }
 

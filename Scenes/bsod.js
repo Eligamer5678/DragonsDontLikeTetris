@@ -5,8 +5,8 @@ import Timer from '../js/Timer.js';
 import UIButton from '../js/UI/Button.js';
 
 export class BSODScene extends Scene {
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('bsod', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+    constructor(...args) {
+        super('bsod', ...args);
         this.loaded = 0;
         this.elements = new Map();
     }
@@ -49,7 +49,7 @@ export class BSODScene extends Scene {
                 case 'narrator': this.narrator = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
-                case 'dragon': this.dragon = value; break;
+                case 'dragons': this.dragons = value; break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
             }
         }
@@ -93,7 +93,7 @@ export class BSODScene extends Scene {
     
     draw() {
         if(!this.isReady) return;
-        if(!((this.frameCount)%2)){
+        if(!((this.frameCount)%2)){  
             this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
             this.Draw.image(this.BackgroundImages['bsod'],Vector.zero(),new Vector(1920,1080));
         }

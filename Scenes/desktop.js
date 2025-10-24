@@ -7,8 +7,8 @@ import Geometry from '../js/Geometry.js';
 
 export class DesktopScene extends Scene {
     
-    constructor(Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene) {
-        super('desktop', Draw, UIDraw, mouse, keys, saver, switchScene, loadScene, preloadScene, removeScene);
+    constructor(...args) {
+        super('desktop', ...args);
         this.loaded = 0;
         this.elements = new Map()
     }
@@ -40,7 +40,7 @@ export class DesktopScene extends Scene {
         resources.set('narrator',this.narrator)
         resources.set('pause',this.elements.get('pause'))
         resources.set('settings-button',this.elements.get('settings-button'))
-        resources.set('dragon',this.dragons[0])
+        resources.set('dragons',this.dragons)
         return resources; 
     }
     onSwitchFrom(resources) {
