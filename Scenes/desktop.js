@@ -1,6 +1,7 @@
 import Scene from './Scene.js';
 import Vector from '../js/Vector.js';
 import Color from '../js/Color.js';
+import Board from '../Game logic/board.js';
 import { Dragon,Appicon,FireBall,Fragment } from '../Game logic/sprites.js';
 import Timer from '../js/Timer.js';
 import Geometry from '../js/Geometry.js';
@@ -10,52 +11,50 @@ export class DesktopScene extends Scene {
     constructor(...args) {
         super('desktop', ...args);
         this.loaded = 0;
-        this.elements = new Map()
+        this.elements = new Map();
+        this.tickCount = 0;
+        this.tickRate = 42; // 24 fps
+        this.tickAccumulator = 0;
+        this.syncStep = 0;
     }
-    
-    async onPreload(resources=null) {
 
+    async onPreload(resources = null) {
+        // ...existing code...
     }
     onSwitchTo() {
-        // Disconnect debug signals when switching out of this scene
-        this.dragons.forEach((dragon)=>{
-            dragon.reset(new Vector(1920/2,1080/2));
-        })
-        this.sessionTimer.reset();
-        this.deaths = 0;
-        this.aiScore = 0;
-        this.lineMessages = [];
-        this.resets = 0;
-        this.sessionBlocks = 0;
-
-        this.Draw.clear()
-        this.UIDraw.clear()
-        let resources = new Map();
-        resources.set('settings', this.settings)
-        resources.set('backgrounds',this.BackgroundImages)
-        resources.set('sprites',this.SpriteImages)
-        resources.set('soundguy',this.soundGuy)
-        resources.set('musician',this.musician)
-        resources.set('conductor',this.conductor)
-        resources.set('narrator',this.narrator)
-        resources.set('pause',this.elements.get('pause'))
-        resources.set('settings-button',this.elements.get('settings-button'))
-        resources.set('dragons',this.dragons)
-        return resources; 
+        this.resetDesktop();
+        this.disconnectDebug();
+        this.Draw.clear();
+        this.UIDraw.clear();
+        return this.packResources();
     }
-    onSwitchFrom(resources) {
-        if (!resources) {
-            console.error('No resources...');
-            return;
-        }
 
+    packResources() {
+        let resources = new Map();
+        resources.set('settings', this.settings);
+        resources.set('backgrounds', this.BackgroundImages);
+        resources.set('sprites', this.SpriteImages);
+        resources.set('soundguy', this.soundGuy);
+        resources.set('musician', this.musician);
+        resources.set('conductor', this.conductor);
+        resources.set('narrator', this.narrator);
+        resources.set('pause', this.elements.get('pause'));
+        resources.set('settings-button', this.elements.get('settings-button'));
+        resources.set('dragons', this.dragons);
+        resources.set('id', this.playerId);
+        return resources;
+    }
+
+    unpackResources(resources) {
+        if (!resources) {
+            console.log('No resources...');
+            return false;
+        }
         if (!(resources instanceof Map)) {
             console.error('Invalid resources type');
-            return;
+            return false;
         }
-
         for (const [key, value] of resources.entries()) {
-            let log = true;
             switch (key) {
                 case 'settings': this.settings = value; break;
                 case 'backgrounds': this.BackgroundImages = value; break;
@@ -67,9 +66,17 @@ export class DesktopScene extends Scene {
                 case 'dragons': this.dragons = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
-                default: console.warn(`Unknown resource key: ${key}`); log = false;
+                case 'id': this.playerId = value; break;
+                default: console.warn(`Unknown resource key: ${key}`);
             }
-            if (log) console.log(`Loaded: ${key}`);
+        }
+        return true;
+    }
+
+    onSwitchFrom(resources) {
+        if (!this.unpackResources(resources)) return false;
+        if (this.RSS) {
+            this.RSS.connect((state) => { this.applyRemoteState(state); });
         }
     }
 
@@ -77,72 +84,74 @@ export class DesktopScene extends Scene {
     onReady() {
         this.isReady = true;
         this.createUI();
-        this.sessionTimer = new Timer('stopwatch');
-        this.sessionTimer.start();
+        this.createTimers();
         this.frameCount = 0;
-
-        // Generate Appicon sprites to fill the desktop
-        this.icons = [];
-        const iconImages = [];
-        for (let i = 0; i < 10; i++) {
-            let img = new Image();
-            img.src = `Assets/desktop icons/DesktopIcon (${i}).png`;
-            iconImages.push(img);
-        }
-        // Fill desktop with icons, cycling through images
-        const iconSize = new Vector(128, 128);
-        const xCount = Math.floor(1920 / iconSize.x);
-        const yCount = Math.floor(1080 / iconSize.y);
-        let iconIndex = 0;
-        for (let y = 0; y < yCount; y++) {
-            if(y>1){
-                // Skip row 5 for taskbar
-                continue;
-            }
-            for (let x = 0; x < xCount; x++) {
-                let px = x * iconSize.x + (iconSize.x / 2);
-                let py = y * iconSize.y + (iconSize.y / 2);
-                let img = iconImages[iconIndex % iconImages.length];
-                let icon = new Appicon(this.Draw, new Vector(px, py), iconSize, img);
-                icon.health = 100;
-                icon.destroy.connect(() => {
-                    this.icons = this.icons.filter(ic => ic !== icon);
-                    this.dragons.forEach((dragon)=>{
-                        dragon.power += 0.2;
-                    })
-                    if (this.icons.length === 0) {
-                        console.log('All desktop icons deleted!');
-                        this.switchScene('bsod');
-                    }
-                });
-                this.icons.push(icon);
-                iconIndex++;
-            }
-        }
+        this.soundsPlayed = 0;
+        this.createParticles();
+        this.deaths = 0;
+        this.aiScore = 0;
+        this.resets = 0;
+        this.sessionBlocks = 0;
+        this.paused = false;
+        this.lineMessages = [];
+        this.playerCount = this.saver.get('twoPlayer', true) ? 2 : 1;
+        this.dragonsLeft = this.playerCount;
+        this.reviveDragons = false;
+        this.dragons.forEach(dragon => {
+            dragon.reset(new Vector(1920 / 2, 1080 / 2));
+            dragon.health = this.playerCount === 2 ? 50 : 100;
+            dragon.onDeath.connect(() => { this.dragonsLeft -= 1; });
+            dragon.megaability.connect(() => { this.reviveDragons = true; });
+        });
+        this.connectDebug();
+        this.setConditions && this.setConditions();
+        this.setMods && this.setMods();
+        this.createIcons();
+        // Multiplayer sync
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        if (localDragon) this.sendState && this.sendState(localDragon);
     }
 
     update(delta) {
-        if(!this.isReady) return;
-        this.sessionTimer.update(delta);
+        if (!this.isReady) return;
+        this.tickAccumulator += delta * 1000;
+        while (this.tickAccumulator >= this.tickRate) {
+            if (!this.paused) {
+                this.tick();
+            }
+            this.tickAccumulator -= this.tickRate;
+        }
         this.frameCount += 1;
-        if(this.keys.pressed('any') || this.mouse.pressed('any')){
-            this.musician.resume();
-        }
-        if(this.loaded===4){
-            this.loaded+=1;
-        }
-        this.dragons.forEach((dragon)=>{
-            dragon.update(delta);
-        })
-        this.mouse.setMask(0);
-        this.mouse.setPower(0);
+        this.draw();
+    }
 
+    tick() {
+        this.tickCount++;
+        const tickDelta = this.tickRate / 1000;
+        this.updateTimers && this.updateTimers(tickDelta);
+        // Dragon updates
+        if (this.saver.get('modifiers/modifier5', false)) {
+            this.dragons.forEach(dragon => {
+                dragon.health += dragon.power * tickDelta / 10;
+                if (dragon.health > dragon.power * 10) dragon.health = dragon.power * 10;
+            });
+        }
+        if (this.reviveDragons) {
+            this.dragons.forEach(dragon => {
+                if (dragon.died) {
+                    dragon.died = false;
+                    dragon.reset(new Vector(1920 / 2, 1080 / 2));
+                }
+            });
+            this.reviveDragons = false;
+        }
+        this.dragons.forEach(dragon => dragon.update(tickDelta));
+        this.updateParticles && this.updateParticles(tickDelta);
         // Update icons and check fireball collisions
         for (let icon of this.icons) {
-            icon.update(delta);
+            icon.update(tickDelta);
         }
-        // Check fireball collisions with icons
-        this.dragons.forEach((dragon)=>{
+        this.dragons.forEach(dragon => {
             for (let fireball of dragon.fireballs) {
                 for (let icon of this.icons) {
                     if (Geometry.rectCollide(fireball.pos, fireball.size, icon.pos, icon.size)) {
@@ -156,38 +165,131 @@ export class DesktopScene extends Scene {
                     }
                 }
             }
-        })
+        });
+        // Check for all icons destroyed
+        if (this.icons.length === 0) {
+            this.switchScene('bsod');
+        }
+        // Multiplayer state sync
+        const localDragon = this.dragons.find(d => d.id === this.playerId);
+        if (localDragon) this.sendState(localDragon);
+    }
 
-        let sortedElements = [...this.elements.values()].sort((a, b) => b.layer - a.layer);
-        for (let elm of sortedElements){
-            elm.update(delta);
+    createUI() {
+        // ...existing code...
+    }
+
+    createTimers() {
+        this.sessionTimer = new Timer('stopwatch');
+        this.sessionTimer.start();
+        // Add more timers if needed for parity
+    }
+
+    createParticles() {
+        this.particles = [];
+        this.particleTimer = new Timer('loop', 0.05);
+        this.particleTimer.onLoop.connect(() => {
+            if (this.particles.length < 40) {
+                let pos = new Vector(Math.random() * 1920, Math.random() * 1080);
+                let vel = new Vector((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
+                let size = 4 + Math.random() * 8;
+                let color = new Color(Math.random(), Math.random(), Math.random(), 1);
+                this.particles.push(new Particle(this.Draw, pos, vel, size, color));
+            }
+        });
+        this.particleTimer.start();
+    }
+
+    updateParticles(delta) {
+        for (let p of this.particles) p.update(delta);
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            if (!this.particles[i].isAlive()) {
+                let pos = new Vector(Math.random() * 1920, Math.random() * 1080);
+                let vel = new Vector((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
+                let size = 4 + Math.random() * 8;
+                let color = new Color(Math.random(), Math.random(), Math.random(), 1);
+                this.particles[i] = new Particle(this.Draw, pos, vel, size, color);
+            }
         }
     }
 
-    createUI(){
-        
+    createIcons() {
+        this.icons = [];
+        const iconImages = [];
+        for (let i = 0; i < 10; i++) {
+            let img = new Image();
+            img.src = `Assets/desktop icons/DesktopIcon (${i}).png`;
+            iconImages.push(img);
+        }
+        const iconSize = new Vector(128, 128);
+        const xCount = Math.floor(1920 / iconSize.x);
+        const yCount = Math.floor(1080 / iconSize.y);
+        let iconIndex = 0;
+        for (let y = 0; y < yCount; y++) {
+            for (let x = 0; x < xCount; x++) {
+                let px = x * iconSize.x + (iconSize.x / 2);
+                let py = y * iconSize.y + (iconSize.y / 2);
+                let img = iconImages[iconIndex % iconImages.length];
+                let icon = new Appicon(this.Draw, new Vector(px, py), iconSize, img);
+                icon.health = 100;
+                icon.destroy.connect(() => {
+                    this.icons = this.icons.filter(ic => ic !== icon);
+                    this.dragons.forEach(dragon => {
+                        dragon.power += 0.2;
+                    });
+                });
+                this.icons.push(icon);
+                iconIndex++;
+            }
+        }
+    }
 
+    resetDesktop() {
+        this.dragons.forEach(dragon => {
+            dragon.died = false;
+            dragon.reset(new Vector(1920 / 2, 1080 / 2));
+        });
+        this.sessionTimer && this.sessionTimer.reset();
+        this.deaths = 0;
+        this.aiScore = 0;
+        this.lineMessages = [];
+        this.resets = 0;
+        this.sessionBlocks = 0;
+    }
+
+    connectDebug() {
+        window.Debug && window.Debug.createSignal('setPower', e => { this.dragons[0].power = e; });
+        window.Debug && window.Debug.createSignal('killDragon', () => { this.dragons[0].health = 0; });
+        window.Debug && window.Debug.createSignal('pause', () => { this.pause(); });
+        window.Debug && window.Debug.createSignal('unpause', () => { this.unpause(); });
+    }
+
+    disconnectDebug() {
+        window.Debug && window.Debug.disconnectSignal('setPower');
+        window.Debug && window.Debug.disconnectSignal('killDragon');
+        window.Debug && window.Debug.disconnectSignal('pause');
+        window.Debug && window.Debug.disconnectSignal('unpause');
     }
     
     draw() {
-        if(!this.isReady) return;
-        if(!((this.frameCount)%2)){
-            this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
-            this.Draw.image(this.BackgroundImages['desktop'],Vector.zero(),new Vector(1920,1080))
-            this.Draw.text(Math.round(this.sessionTimer.getTime()*100)/100,new Vector(1920/2,1080/2),this.settings.colors.timer,1,100,{'align':'center','baseline':'middle'})
+        if (!this.isReady) return;
+        if (!((this.frameCount) % 2)) {
+            this.UIDraw.rect(new Vector(700, 0), new Vector(530, 1080), null, true, 0, true);
+            this.Draw.image(this.BackgroundImages['desktop'], Vector.zero(), new Vector(1920, 1080));
+            this.Draw.text(Math.round(this.sessionTimer.getTime() * 100) / 100, new Vector(1920 / 2, 1080 / 2), this.settings.colors.timer, 1, 100, { 'align': 'center', 'baseline': 'middle' });
+            for (let p of this.particles) p.draw();
             this.icons.forEach(icon => icon.draw());
         }
-
         let sortedElements = [...this.elements.values()].sort((a, b) => a.layer - b.layer);
         for (const elm of sortedElements) {
             elm.draw(this.UIDraw);
         }
-        this.UIDraw.useCtx('overlays')
-        this.UIDraw.clear()
-        this.dragons.forEach((dragon)=>{
-            dragon.draw()
-        })
-        this.UIDraw.useCtx('UI')
+        this.UIDraw.useCtx('overlays');
+        this.UIDraw.clear();
+        this.dragons.forEach(dragon => {
+            dragon.draw();
+        });
+        this.UIDraw.useCtx('UI');
     }
 
     

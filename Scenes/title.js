@@ -341,7 +341,7 @@ export class TitleScene extends Scene {
                 case 'musician': break;
                 case 'conductor': this.conductor = value; break;
                 case 'narrator': this.narrator = value; break;
-                case 'dragons': this.dragon = value[0]; break;
+                case 'dragons': this.dragons = value; break;
                 case 'settings-button': this.elements.set('settings-button', value); break;
                 case 'pause': this.elements.set('pause', value); break;
                 default: console.warn(`Unknown resource key: ${key}`); log = false;
@@ -351,6 +351,9 @@ export class TitleScene extends Scene {
         this.twoPlayer = false;
         this.genBlocks()
         this.conductor.reset();
+        this.dragons.forEach((dragon) => {
+            dragon.reset()
+        })
     }
 
     onSwitchTo(){
@@ -366,7 +369,6 @@ export class TitleScene extends Scene {
         resources.set('narrator',this.narrator)
         resources.set('pause',this.pauseMenu)
         resources.set('dragons',this.dragons)
-        resources.set('twoPlayer',this.twoPlayer)
         resources.set('settings-button',this.elements.get('settings-button'))
         resources.set('id',this.playerId)
         return resources; 
