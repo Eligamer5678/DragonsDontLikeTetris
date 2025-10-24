@@ -36,6 +36,8 @@ export default class Board {
         this.glitchColor = new Color(0.9,1,1);
         this.paused = false;
 
+        this.fast = false;
+
         this.playerCount = 1;
     }
 
@@ -180,7 +182,12 @@ export default class Board {
         )
     }
 
-    moveTetromino(type='fall',data=new Vector(0,1)){
+    moveTetromino(type='fall',data=new Vector(0,1),stop=false){
+        if(this.fast && type === 'fall' && !stop){
+            this.moveTetromino('fall',data,true);
+            this.moveTetromino('fall',data,true);
+            this.moveTetromino('fall',data,true);
+        }
         this.canlock = false;
         if (this.activeTetromino === null) return false;
         let canMove = true;
@@ -202,8 +209,8 @@ export default class Board {
             } 
             this.canlock = true;
             if(this.playerCount === 1){
+                
                 this.lockTetromino();
-                this.clearLines();
             }
         }
     }
@@ -219,6 +226,7 @@ export default class Board {
             for (let part of this.activeTetromino.getPositions()){
                 this.setTile(part,1)
             } 
+            this.clearLines();
             if(this.justSpawned){
                 this.reset();
                 this.onTopout.emit()
@@ -423,7 +431,11 @@ export default class Board {
         this.board[y][x] = 100;
     }
 
-    updateAI(){
+    updateAI(stop=false){
+        if(this.fast && !stop){
+            this.applyBestMove();
+            this.applyBestMove();
+        }
         this.applyBestMove();
     }
 
@@ -617,6 +629,9 @@ export default class Board {
             }
             if(collided){
                 dragon.health -= 1*this.dmgMult;
+                if(this.fast){
+                    dragon.health -= 1*this.dmgMult*3;
+                }
                 this.damageDragon.emit()
             }
         }
@@ -648,8 +663,8 @@ export default class Board {
     update(delta) {
         this.dragons.forEach((dragon) => {
             if(dragon.onlineGhost) return;
-            this.collideWall(dragon);
             this.collideTile(dragon);
+            this.collideWall(dragon);
             if(!this.paused){
                 this.collideActive(dragon);
                 this.collideFire(dragon);

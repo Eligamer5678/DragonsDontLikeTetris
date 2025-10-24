@@ -7,8 +7,20 @@ export default function createHInput(pos, size, type = 'text', cssProps = {}, pa
         const rect = uiCanvas.getBoundingClientRect();
         const scaleX = rect.width / 1920;
         const scaleY = rect.height / 1080;
-        const left = rect.left + pos.x * scaleX;
-        const top = rect.top + pos.y * scaleY;
+        let left, top;
+        if (parent && parent.getBoundingClientRect) {
+            const pRect = parent.getBoundingClientRect();
+            if (parent === uiCanvas.parentNode) {
+                left = pRect.left + pos.x * scaleX;
+                top = pRect.top + pos.y * scaleY;
+            } else {
+                left = pos.x * scaleX;
+                top = pos.y * scaleY;
+            }
+        } else {
+            left = rect.left + pos.x * scaleX;
+            top = rect.top + pos.y * scaleY;
+        }
         const width = size.x * scaleX;
         const height = size.y * scaleY;
         input.style.position = 'absolute';

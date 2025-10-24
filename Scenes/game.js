@@ -312,8 +312,9 @@ export class GameScene extends Scene {
         })
         if(this.saver.get('modifiers/modifier6', false)===true){
             if (this.fallTimer && this.AITimer) {
-                this.fallTimer.endTime = 0.01;
+                this.fallTimer.endTime = 0.04;
                 this.AITimer.endTime = 0.01;
+                this.Board.fast = true;
                 if(this.SPEED === false){
                     this.fallTimer.onLoop.connect('fall1', () => this.Board.moveTetromino('fall'));
                     this.fallTimer.onLoop.connect('fall2', () => this.Board.moveTetromino('fall'));
@@ -333,6 +334,7 @@ export class GameScene extends Scene {
                 this.AITimer.onLoop.disconnect('ai2');
                 this.AITimer.onLoop.disconnect('ai3');
             }
+            this.Board.fast = false;
             this.SPEED = false;
         }
     }
@@ -614,9 +616,14 @@ export class GameScene extends Scene {
             this.lineMessages.shift();
         }
         // Get dragon instances by id for multiplayer safety
-        const localDragon = this.dragons.find(d => d.id === this.playerId);
-        const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
-        const remoteDragon = this.dragons.find(d => d.id === remoteId);
+        let localDragon = null;
+        if(this.playerCount === 2){
+            localDragon = this.dragons.find(d => d.id === this.playerId);
+            const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
+            const remoteDragon = this.dragons.find(d => d.id === remoteId);
+        }else{
+            localDragon = this.dragons[0];
+        }
 
         if(!((this.frameCount-21)%20)){
             this.UIDraw.rect(new Vector(0,0),new Vector(708,1080),null,true,0,true);

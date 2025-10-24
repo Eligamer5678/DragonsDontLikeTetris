@@ -170,7 +170,7 @@ export class BSODScene extends Scene {
         if(!this.isReady) return;
         if(!((this.frameCount)%2)){  
             this.UIDraw.rect(new Vector(700,0),new Vector(530,1080),null,true,0,true);
-            this.Draw.image(this.BackgroundImages['bsod'],Vector.zero(),new Vector(1920,1080));
+            this.Draw.image(this.BackgroundImages['BSOD'],Vector.zero(),new Vector(1920,1080));
         }
         let sortedElements = [...this.elements.values()].sort((a, b) => a.layer - b.layer);
         for (const elm of sortedElements) {

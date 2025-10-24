@@ -172,14 +172,15 @@ class Game {
         );
 
         // Child elements keep the same offsets relative to the panel's top-left
-        const label = createHLabel(new Vector(panelPos.x + 10, panelPos.y + 10), new Vector(80, 30), 'Room ID:', { color:'#fff', fontSize:14, textAlign:'center' });
-        const input = createHInput(new Vector(panelPos.x + 100, panelPos.y + 10), new Vector(200, 30), 'text', { background:'#222', color:'#fff', border:'1px solid #555', borderRadius:'4px', textAlign:'center' });
-        const statusLabel = createHLabel(new Vector(panelPos.x + 10, panelPos.y + 120), new Vector(300,20), 'Status: Idle', { color:'#ddd', fontSize:14, textAlign:'left' });
+        // Child positions are local offsets inside the panel (logical coordinates)
+        const label = createHLabel(new Vector(10, 10), new Vector(80, 30), 'Room ID:', { color:'#fff', fontSize:14, textAlign:'center' }, panel);
+        const input = createHInput(new Vector(100, 10), new Vector(200, 30), 'text', { background:'#222', color:'#fff', border:'1px solid #555', borderRadius:'4px', textAlign:'center' }, panel);
+        const statusLabel = createHLabel(new Vector(10, 120), new Vector(300,20), 'Status: Idle', { color:'#ddd', fontSize:14, textAlign:'left' }, panel);
 
-        const createBtn = createHButton(new Vector(panelPos.x + 10, panelPos.y + 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+        const createBtn = createHButton(new Vector(10, 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' }, panel);
             createBtn.textContent = 'Create';
 
-        const joinBtn = createHButton(new Vector(panelPos.x + 170, panelPos.y + 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' });
+        const joinBtn = createHButton(new Vector(170, 60), new Vector(130, 40), '#333', { color:'#fff', borderRadius:'6px', fontSize:14, border:'1px solid #777' }, panel);
         joinBtn.textContent = 'Join';
 
         const updateStatus = (state) => {

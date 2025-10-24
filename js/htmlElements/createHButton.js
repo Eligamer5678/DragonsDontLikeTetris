@@ -6,10 +6,24 @@ export default function createHButton(pos, size, bg, cssProps = {}, parent) {
         const rect = uiCanvas.getBoundingClientRect();
         const scaleX = rect.width / 1920;
         const scaleY = rect.height / 1080;
-        const left = rect.left + pos.x * scaleX;
-        const top = rect.top + pos.y * scaleY;
-        const width = size.x * scaleX;
-        const height = size.y * scaleY;
+        let left, top, width, height;
+        if (parent && parent.getBoundingClientRect) {
+            const pRect = parent.getBoundingClientRect();
+            // If parent is the same container as the UI canvas parent, treat pos as global (viewport) coords
+            if (parent === uiCanvas.parentNode) {
+                left = pRect.left + pos.x * scaleX;
+                top = pRect.top + pos.y * scaleY;
+            } else {
+                // Parent is a custom panel; position children relative to parent's interior
+                left = pos.x * scaleX;
+                top = pos.y * scaleY;
+            }
+        } else {
+            left = rect.left + pos.x * scaleX;
+            top = rect.top + pos.y * scaleY;
+        }
+        width = size.x * scaleX;
+        height = size.y * scaleY;
         btn.style.position = 'absolute';
         btn.style.left = left + 'px';
         btn.style.top = top + 'px';
