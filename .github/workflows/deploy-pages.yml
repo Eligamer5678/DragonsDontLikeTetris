@@ -5,9 +5,8 @@ on:
     branches: [ multiplayer ]
 
 permissions:
-  contents: write
+  contents: read
   pages: write
-  id-token: write
 
 jobs:
   deploy:
@@ -20,21 +19,35 @@ jobs:
         env:
           FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
         run: |
-          set -e
+          set -euo pipefail
           # prepare a clean site directory to publish
+          rm -rf site || true
           mkdir site
-          # copy everything except .git to avoid accidental pushes
+          # copy everything except .git and github workflow files
           rsync -a --exclude='.git' --exclude='.github' ./ site/
-          # ensure the server folder exists
           mkdir -p site/js/Server
-          if [ -z "$FIREBASE_CONFIG_JSON" ]; then
+          if [ -z "${FIREBASE_CONFIG_JSON:-}" ]; then
             echo "Warning: FIREBASE_CONFIG_JSON secret is empty. The published site will not include firebaseConfig.js"
           else
-            echo "export const firebaseConfig = ${FIREBASE_CONFIG_JSON};" > site/js/Server/firebaseConfig.js
+            # write the file without printing the secret to logs
+            printf '%s' "export const firebaseConfig = ${FIREBASE_CONFIG_JSON};" > site/js/Server/firebaseConfig.js
+          fi
+          # safe verification: print file size (bytes) if present
+          if [ -f site/js/Server/firebaseConfig.js ]; then
+            size=$(wc -c < site/js/Server/firebaseConfig.js || true)
+            echo "firebaseConfig.js written; size=${size} bytes"
+          else
+            echo "firebaseConfig.js not present"
           fi
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Configure Pages
+        uses: actions/configure-pages@v3
+
+      - name: Upload artifact for Pages
+        uses: actions/upload-pages-artifact@v1
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./site
+          path: ./site
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v1
