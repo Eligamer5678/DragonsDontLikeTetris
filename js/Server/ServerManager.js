@@ -60,11 +60,12 @@ export default class ServerManager {
     }
 
     _ensureRoom(id=null) {
+        // If an explicit id is provided, the caller intends to operate on that id
+        // (for example sendDiff(customID) writes to another room). In that case
+        // don't require this.roomId to be set. Otherwise require that this.roomId
+        // is present before performing room-relative operations.
+        if (id !== null) return true;
         if (!this.roomId) {
-            const err = new Error("ServerManager: No active room set");
-            this.signals.error.emit(err);
-            return false;
-        }else if (id === null) {
             const err = new Error("ServerManager: No active room set");
             this.signals.error.emit(err);
             return false;
