@@ -8,12 +8,12 @@ import Signal from './js/Signal.js';
 import { addEvent, getID } from './js/Support.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getDatabase } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
-import ServerManager from '../js/Server/ServerManager.js';
+import ServerManager from './js/Server/ServerManager.js';
 import { firebaseConfig } from './firebaseConfig.js';
-import createHButton from '../js/htmlElements/createHButton.js';
-import createHDiv from '../js/htmlElements/createHDiv.js';
-import createHInput from '../js/htmlElements/createHInput.js';
-import createHLabel from '../js/htmlElements/createHLabel.js';
+import createHButton from './js/htmlElements/createHButton.js';
+import createHDiv from './js/htmlElements/createHDiv.js';
+import createHInput from './js/htmlElements/createHInput.js';
+import createHLabel from './js/htmlElements/createHLabel.js';
 
 
 const mainWidth = 1920;
