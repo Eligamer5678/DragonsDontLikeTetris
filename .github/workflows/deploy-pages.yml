@@ -1,0 +1,40 @@
+name: Deploy Pages (inject firebase config)
+
+on:
+  push:
+    branches: [ multiplayer ]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare site with injected firebase config
+        env:
+          FIREBASE_CONFIG_JSON: ${{ secrets.FIREBASE_CONFIG_JSON }}
+        run: |
+          set -e
+          # prepare a clean site directory to publish
+          mkdir site
+          # copy everything except .git to avoid accidental pushes
+          rsync -a --exclude='.git' --exclude='.github' ./ site/
+          # ensure the server folder exists
+          mkdir -p site/js/Server
+          if [ -z "$FIREBASE_CONFIG_JSON" ]; then
+            echo "Warning: FIREBASE_CONFIG_JSON secret is empty. The published site will not include firebaseConfig.js"
+          else
+            echo "export const firebaseConfig = ${FIREBASE_CONFIG_JSON};" > site/js/Server/firebaseConfig.js
+          fi
+
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
