@@ -9,22 +9,12 @@ import { addEvent, getID } from './js/Support.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getDatabase } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 import ServerManager from '../js/Server/ServerManager.js';
-
+import { firebaseConfig } from './firebaseConfig.js';
 import createHButton from '../js/htmlElements/createHButton.js';
 import createHDiv from '../js/htmlElements/createHDiv.js';
 import createHInput from '../js/htmlElements/createHInput.js';
 import createHLabel from '../js/htmlElements/createHLabel.js';
 
-let firebaseConfig = {
-    apiKey: "AIzaSyA1K-Y-6UUSLy3Mbs71N3Md0WWvZTX4oss",
-    authDomain: "ddlt-5804e.firebaseapp.com",
-    databaseURL: "https://ddlt-5804e-default-rtdb.firebaseio.com",
-    projectId: "ddlt-5804e",
-    storageBucket: "ddlt-5804e.firebasestorage.app",
-    messagingSenderId: "961527549137",
-    appId: "1:961527549137:web:b9f704ad1468287f5309f0",
-    measurementId: "G-G7P47F5QH0"
-};
 
 const mainWidth = 1920;
 const mainheight = 1080;
@@ -71,6 +61,35 @@ class Game {
         this.app = initializeApp(firebaseConfig);
         this.db = getDatabase(this.app);
         this.server = new ServerManager(this.db);
+        // start a local tick for coordination/heartbeat purposes
+        try { this.server.startTick(1000); } catch (e) { /* ignore */ }
+
+        // Register a debug console command 'testDelete' that deletes a random room.
+        // The project's Debug implementation may be created later; poll for it briefly.
+        const registerTestDelete = async () => {
+            const maxWait = 5000; // ms
+            const start = Date.now();
+            while (Date.now() - start < maxWait) {
+                if (window.Debug && typeof window.Debug.createSignal === 'function') break;
+                // wait a bit
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise(r => setTimeout(r, 100));
+            }
+            if (window.Debug && typeof window.Debug.createSignal === 'function') {
+                try {
+                    window.Debug.createSignal('testDelete', async () => {
+                        const removed = await this.server.deleteRandomRoom();
+                        console.log('Debug.testDelete removed:', removed);
+                    });
+                    console.log('Registered Debug signal: testDelete');
+                } catch (e) {
+                    console.warn('Failed to register Debug.testDelete', e);
+                }
+            } else {
+                console.warn('Debug API not found; testDelete not registered');
+            }
+        };
+        registerTestDelete();
 
         this.init();
     }
@@ -231,6 +250,23 @@ class Game {
         });
 
         this.uiElements = { panel, label, input, createBtn, joinBtn, statusLabel };
+
+        // Start coordinated sweeper attempts periodically (every 30s).
+        // Each attempt will try to claim a stale room and perform required steps (5 steps of 5s each by default).
+        try {
+            if (this._coordinatedSweepInterval) clearInterval(this._coordinatedSweepInterval);
+            this._coordinatedSweepInterval = setInterval(() => {
+                // Indicate we're attempting a coordinated sweep (even if no candidate is found)
+                console.log('[Script] coordinated sweeper tick - attempting sweep');
+                // run the coordinated sweep in background; using test params: requiredCount=5, stepMs=5000
+                this.server.coordinatedSweepAttempt({ maxAgeMs: 10 * 1000, requiredCount: 5, stepMs: 5000 })
+                    .then(removed => {
+                        if (removed) console.log('Coordinated sweeper removed room:', removed);
+                    }).catch(e => console.warn('Coordinated sweep error', e));
+            }, 5 * 1000); // run every 5 seconds for testing
+        } catch (e) {
+            console.warn('Failed to start coordinated sweeper interval', e);
+        }
     }
 
 
