@@ -9,7 +9,7 @@ import { addEvent, getID } from './js/Support.js';
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
 import { getDatabase } from "https://www.gstatic.com/firebasejs/11.0.1/firebase-database.js";
 import ServerManager from './js/Server/ServerManager.js';
-import { firebaseConfig } from './js/Server/firebaseConfig.js';
+// firebaseConfig is loaded dynamically at runtime (may be gitignored on purpose)
 import createHButton from './js/htmlElements/createHButton.js';
 import createHDiv from './js/htmlElements/createHDiv.js';
 import createHInput from './js/htmlElements/createHInput.js';
@@ -57,39 +57,52 @@ class Game {
         this.enableMultiplayer = new Signal(); // Signal to enable multiplayer features
         this.playerCount = 1; // Number of players in the current session
 
-        // Firebase setup
-        this.app = initializeApp(firebaseConfig);
-        this.db = getDatabase(this.app);
-        this.server = new ServerManager(this.db);
-        // start a local tick for coordination/heartbeat purposes
-        try { this.server.startTick(1000); } catch (e) { /* ignore */ }
+        // Firebase setup: dynamically import the config so builds without a committed
+        // `firebaseConfig.js` (intentionally gitignored) don't fail to load the module.
+        // If the file is missing on the published site, dynamic import will reject and
+        // we disable multiplayer gracefully.
+        (async () => {
+            try {
+                const mod = await import('./js/Server/firebaseConfig.js');
+                this.app = initializeApp(mod.firebaseConfig);
+                this.db = getDatabase(this.app);
+                this.server = new ServerManager(this.db);
+                // start a local tick for coordination/heartbeat purposes
+                try { this.server.startTick(1000); } catch (e) { /* ignore */ }
 
-        // Register a debug console command 'testDelete' that deletes a random room.
-        // The project's Debug implementation may be created later; poll for it briefly.
-        const registerTestDelete = async () => {
-            const maxWait = 5000; // ms
-            const start = Date.now();
-            while (Date.now() - start < maxWait) {
-                if (window.Debug && typeof window.Debug.createSignal === 'function') break;
-                // wait a bit
-                // eslint-disable-next-line no-await-in-loop
-                await new Promise(r => setTimeout(r, 100));
+                // Register a debug console command 'testDelete' that deletes a random room.
+                // The project's Debug implementation may be created later; poll for it briefly.
+                const registerTestDelete = async () => {
+                    const maxWait = 5000; // ms
+                    const start = Date.now();
+                    while (Date.now() - start < maxWait) {
+                        if (window.Debug && typeof window.Debug.createSignal === 'function') break;
+                        // wait a bit
+                        // eslint-disable-next-line no-await-in-loop
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                    if (window.Debug && typeof window.Debug.createSignal === 'function') {
+                        try {
+                            window.Debug.createSignal('testDelete', async () => {
+                                const removed = await this.server.deleteRandomRoom();
+                                console.log('Debug.testDelete removed:', removed);
+                            });
+                            console.log('Registered Debug signal: testDelete');
+                        } catch (e) {
+                            console.warn('Failed to register Debug.testDelete', e);
+                        }
+                    } else {
+                        console.warn('Debug API not found; testDelete not registered');
+                    }
+                };
+                registerTestDelete();
+            } catch (e) {
+                console.warn('Firebase config not found; multiplayer disabled', e);
+                this.app = null;
+                this.db = null;
+                this.server = null;
             }
-            if (window.Debug && typeof window.Debug.createSignal === 'function') {
-                try {
-                    window.Debug.createSignal('testDelete', async () => {
-                        const removed = await this.server.deleteRandomRoom();
-                        console.log('Debug.testDelete removed:', removed);
-                    });
-                    console.log('Registered Debug signal: testDelete');
-                } catch (e) {
-                    console.warn('Failed to register Debug.testDelete', e);
-                }
-            } else {
-                console.warn('Debug API not found; testDelete not registered');
-            }
-        };
-        registerTestDelete();
+        })();
 
         this.init();
     }
@@ -97,7 +110,8 @@ class Game {
     async init() {
         await this.loadScene('title');
         this.switchScene('title');
-        this.createMultiplayerUI();
+        // Only create the multiplayer UI if the server (firebase) was initialized.
+        if (this.server) this.createMultiplayerUI();
     }
 
     // Loads a scene from a file if not already loaded, or if reload is true. Returns a Promise
