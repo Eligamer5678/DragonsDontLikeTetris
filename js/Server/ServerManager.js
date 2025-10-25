@@ -125,7 +125,16 @@ export default class ServerManager {
     async syncSet(path, value) {
         if (!this._ensureRoom()) return;
         try {
-            await set(ref(this.db, this._path(path)), value);
+            const fullRef = ref(this.db, this._path(path));
+            console.debug('[ServerManager] syncSet ->', this._path(path), value);
+            await set(fullRef, value);
+            // read-after-write verification
+            try {
+                const snap = await get(fullRef);
+                console.debug('[ServerManager] syncSet verified ->', snap.exists() ? snap.val() : null);
+            } catch (readErr) {
+                console.warn('[ServerManager] syncSet: read-after-write failed', readErr);
+            }
             this.signals.sent.emit(path, value);
         } catch (e) {
             this.signals.error.emit(e);
@@ -135,7 +144,16 @@ export default class ServerManager {
     async syncUpdate(path, valueObj) {
         if (!this._ensureRoom()) return;
         try {
-            await update(ref(this.db, this._path(path)), valueObj);
+            const fullRef = ref(this.db, this._path(path));
+            console.debug('[ServerManager] syncUpdate ->', this._path(path), valueObj);
+            await update(fullRef, valueObj);
+            // read-after-update verification
+            try {
+                const snap = await get(fullRef);
+                console.debug('[ServerManager] syncUpdate verified ->', snap.exists() ? snap.val() : null);
+            } catch (readErr) {
+                console.warn('[ServerManager] syncUpdate: read-after-update failed', readErr);
+            }
             this.signals.sent.emit(path, valueObj);
         } catch (e) {
             this.signals.error.emit(e);
@@ -145,7 +163,15 @@ export default class ServerManager {
     async syncRemove(path) {
         if (!this._ensureRoom()) return;
         try {
-            await set(ref(this.db, this._path(path)), null);
+            const fullRef = ref(this.db, this._path(path));
+            console.debug('[ServerManager] syncRemove ->', this._path(path));
+            await set(fullRef, null);
+            try {
+                const snap = await get(fullRef);
+                console.debug('[ServerManager] syncRemove verified ->', snap.exists() ? snap.val() : null);
+            } catch (readErr) {
+                console.warn('[ServerManager] syncRemove: read-after-remove failed', readErr);
+            }
             this.signals.sent.emit(path, null);
         } catch (e) {
             this.signals.error.emit(e);
@@ -176,8 +202,9 @@ export default class ServerManager {
         const dbRef = ref(this.db, fullPath);
         const listener = onValue(dbRef, (snapshot) => {
             const val = snapshot.val();
+            console.debug('[ServerManager] onValue ->', fullPath, val);
             this.set(path, val, false);
-            callback(val);
+            try { callback(val); } catch (cbErr) { console.error('[ServerManager] on callback error', cbErr); }
             this.signals.updated.emit(path, val);
         });
         // onValue returns an unsubscribe function in modern SDKs; store whatever it returns
