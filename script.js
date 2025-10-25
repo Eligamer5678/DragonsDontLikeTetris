@@ -62,8 +62,17 @@ class Game {
         // If the file is missing on the published site, dynamic import will reject and
         // we disable multiplayer gracefully.
         (async () => {
+            const cfgUrl = './js/Server/firebaseConfig.js';
             try {
-                const mod = await import('./js/Server/firebaseConfig.js');
+                // Check that the config file actually exists and looks like JavaScript before
+                // attempting a dynamic import. This avoids a noisy MIME-type module error in
+                // the browser when the file is missing and the server returns HTML (404 page).
+                const head = await fetch(cfgUrl, { method: 'HEAD' });
+                if (!head.ok) throw new Error(`config not found: ${head.status}`);
+                const ctype = head.headers.get('content-type') || '';
+                if (!/javascript/.test(ctype)) throw new Error(`unexpected content-type: ${ctype}`);
+
+                const mod = await import(cfgUrl);
                 this.app = initializeApp(mod.firebaseConfig);
                 this.db = getDatabase(this.app);
                 this.server = new ServerManager(this.db);
