@@ -617,10 +617,11 @@ export class GameScene extends Scene {
         }
         // Get dragon instances by id for multiplayer safety
         let localDragon = null;
+        let remoteDragon = null;
         if(this.playerCount === 2){
             localDragon = this.dragons.find(d => d.id === this.playerId);
             const remoteId = this.playerId === 'p1' ? 'p2' : 'p1';
-            const remoteDragon = this.dragons.find(d => d.id === remoteId);
+            remoteDragon = this.dragons.find(d => d.id === remoteId);
         }else{
             localDragon = this.dragons[0];
         }
