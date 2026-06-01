@@ -6,5 +6,5 @@ export const firebaseConfig = {
     storageBucket: "ddlt-5804e.firebasestorage.app",
     messagingSenderId: "961527549137",
     appId: "1:961527549137:web:b9f704ad1468287f5309f0",
-    measurementId: "G-G7P47F5QH0"
+    measurementId: "G-G7P47F5QH0" 
 };
